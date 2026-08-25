@@ -270,6 +270,39 @@
   });
 
   // ---------- Apply edit: render offline and bake a new file for upload ----------
+  // Exported as MP3 (compressed) so long tracks don't blow past the server's
+  // upload size limit the way an uncompressed WAV would. Falls back to WAV
+  // only if the MP3 encoder library failed to load (e.g. offline/blocked CDN).
+  function floatTo16BitPCM(float32Array) {
+    const out = new Int16Array(float32Array.length);
+    for (let i = 0; i < float32Array.length; i++) {
+      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+    }
+    return out;
+  }
+
+  function bufferToMp3(buffer, kbps = 192) {
+    if (typeof lamejs === "undefined") return null;
+    const numCh = Math.min(2, buffer.numberOfChannels);
+    const sampleRate = buffer.sampleRate;
+    const encoder = new lamejs.Mp3Encoder(numCh, sampleRate, kbps);
+    const left = floatTo16BitPCM(buffer.getChannelData(0));
+    const right = numCh > 1 ? floatTo16BitPCM(buffer.getChannelData(1)) : null;
+    const blockSize = 1152;
+    const chunks = [];
+    for (let i = 0; i < left.length; i += blockSize) {
+      const leftChunk = left.subarray(i, i + blockSize);
+      const buf = right
+        ? encoder.encodeBuffer(leftChunk, right.subarray(i, i + blockSize))
+        : encoder.encodeBuffer(leftChunk);
+      if (buf.length > 0) chunks.push(new Int8Array(buf));
+    }
+    const end = encoder.flush();
+    if (end.length > 0) chunks.push(new Int8Array(end));
+    return new Blob(chunks, { type: "audio/mpeg" });
+  }
+
   function bufferToWav(buffer) {
     const numCh = buffer.numberOfChannels;
     const sampleRate = buffer.sampleRate;
@@ -322,8 +355,7 @@
     src.connect(gain);
     gain.connect(offlineCtx.destination);
     src.start(0);
-    const rendered = await offlineCtx.startRendering();
-    return bufferToWav(rendered);
+    return offlineCtx.startRendering();
   }
 
   applyBtn.addEventListener("click", async () => {
@@ -343,9 +375,20 @@
     applyBtn.disabled = true;
     applyBtn.textContent = "⏳ Processing...";
     try {
-      const blob = await renderEdited(originalBuffer, opts);
+      const rendered = await renderEdited(originalBuffer, opts);
       const baseName = (originalFile.name || "track").replace(/\.[^/.]+$/, "");
-      const editedFile = new File([blob], `${baseName}-edited.wav`, { type: "audio/wav" });
+
+      let blob = bufferToMp3(rendered, 192);
+      let outName = `${baseName}-edited.mp3`;
+      if (!blob) {
+        // MP3 encoder unavailable (e.g. CDN blocked) — fall back to WAV,
+        // but warn since it can be much larger and may hit the upload limit.
+        blob = bufferToWav(rendered);
+        outName = `${baseName}-edited.wav`;
+        say("MP3 encoder gak bisa dimuat, pakai WAV (ukuran lebih besar).", "error");
+      }
+
+      const editedFile = new File([blob], outName, { type: blob.type });
       window.MusicLabTrack.set(editedFile);
       statusEl.textContent = "✅ Edited - ready to upload";
       applyBtn.textContent = "✓ Applied";
