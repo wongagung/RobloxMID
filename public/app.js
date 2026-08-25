@@ -31,11 +31,11 @@ function formatSize(bytes) {
 
 function selectFile(file) {
   if (!file) return;
-  const allowed = /\.(mp3|wav|ogg|flac)$/i.test(file.name);
-  if (!allowed) return toast("Format tidak didukung.", "error");
+  if (file.size > 20 * 1024 * 1024) return toast("File terlalu besar. Maksimal 20 MB.", "error");
   selectedFile = file;
   $("#fileName").textContent = file.name;
-  $("#fileMeta").textContent = formatSize(file.size);
+  const ext = (file.name.match(/\.([^.]+)$/) || ["", "?"])[1].toUpperCase();
+  $("#fileMeta").textContent = `${formatSize(file.size)} · ${ext}`;
   $("#assetName").value = file.name.replace(/\.[^/.]+$/, "");
   selected.classList.remove("hidden");
   dropzone.classList.add("has-file");
@@ -83,16 +83,24 @@ function renderHistory(items) {
       <div class="row-art">♫</div>
       <div class="row-main">
         <strong>${escapeHtml(item.name)}</strong>
-        <span>${escapeHtml(item.originalName)} · ${formatSize(item.size)}</span>
+        <span>${escapeHtml(item.originalName)} · ${formatSize(item.size)} · ${formatDateTime(item.createdAt)}</span>
       </div>
       <div class="chips">
         <span class="chip ${statusClass(item.roblox?.status)}">R ${statusLabel(item.roblox?.status)}</span>
         <span class="chip ${statusClass(item.telegram?.status)}">T ${statusLabel(item.telegram?.status)}</span>
+        ${item.conversion?.status && item.conversion.status !== "not_needed" ? `<span class="chip ${statusClass(item.conversion?.status)}">↻ ${statusLabel(item.conversion?.status)}</span>` : ""}
       </div>
       <div class="asset-id">${rid ? `<b>${rid}</b><button onclick="copyText('${sound}')">Copy</button>` : `<span>${item.roblox?.error || "Waiting..."}</span>`}</div>
     </article>`;
   }).join("");
 }
+function formatDateTime(value) {
+  if (!value) return "-";
+  try {
+    return new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+  } catch { return value; }
+}
+
 function escapeHtml(s="") {
   return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
 }
@@ -126,7 +134,7 @@ uploadBtn.onclick = () => {
   };
   xhr.onload = async () => {
     if (xhr.status >= 200 && xhr.status < 300) {
-      $("#progressText").textContent = "Processing Roblox + Telegram...";
+      $("#progressText").textContent = "Processing Telegram + Roblox...";
       $("#progressBar").style.width = "100%";
       const result = JSON.parse(xhr.responseText);
       toast("Upload diterima. Processing berjalan.", "success");
@@ -152,6 +160,13 @@ $("#themeBtn").onclick = () => {
 if (localStorage.theme === "light") document.body.classList.add("light");
 
 (async function init(){
+  function updateClock(){
+    const now = new Date();
+    $("#clock").textContent = new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(now);
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
+
   try {
     const cfg = await api("/api/config");
     $("#limitLabel").textContent = `Max ${cfg.maxFileSizeMb} MB`;

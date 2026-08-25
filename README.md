@@ -2,12 +2,13 @@
 
 Web dashboard untuk:
 - preview audio
-- upload MP3/WAV/OGG/FLAC
+- upload MP3/WAV/OGG/FLAC serta format audio lain yang dapat dibaca FFmpeg
+- otomatis convert format yang belum didukung menjadi MP3
 - kirim file ke Telegram
 - upload audio ke Roblox Open Cloud
 - menampilkan Roblox Asset ID
 - copy `rbxassetid://...`
-- menyimpan history lokal
+- menyimpan history metadata lokal (file audio tidak disimpan permanen di server)
 
 ## 1. Windows / local
 
@@ -26,6 +27,7 @@ Isi `.env`:
 ```env
 PORT=8787
 MAX_FILE_SIZE_MB=20
+UPLOAD_RETENTION_MINUTES=60
 
 ROBLOX_API_KEY=...
 ROBLOX_USER_ID=...
@@ -67,12 +69,18 @@ git pull
 docker compose up -d --build
 ```
 
-## 5. Reverse proxy
+## 5. Storage & cleanup
+
+File audio di server hanya bersifat sementara. Setelah proses selesai, file asli dan file hasil konversi otomatis dihapus. Salinan Telegram disimpan sebagai storage utama.
+
+`UPLOAD_RETENTION_MINUTES` juga membersihkan file sementara yang tertinggal setelah restart/crash.
+
+## 6. Reverse proxy
 
 Jika menggunakan Nginx, proxy domain ke:
 
 ```text
-http://127.0.0.1:8787
+http://127.0.0.1:8788
 ```
 
 ## Catatan

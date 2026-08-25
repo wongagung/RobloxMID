@@ -4,10 +4,13 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
+import { execFile } from "child_process";
+import { promisify } from "util";
 import { fileURLToPath } from "url";
 import { uploadAudioToRoblox } from "./roblox.js";
 import { sendAudioToTelegram } from "./telegram.js";
 
+const execFileAsync = promisify(execFile);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
@@ -22,12 +25,13 @@ if (!fs.existsSync(historyFile)) fs.writeFileSync(historyFile, "[]");
 const app = express();
 const PORT = Number(process.env.PORT || 8787);
 const MAX_MB = Number(process.env.MAX_FILE_SIZE_MB || 20);
-const allowed = new Set([".mp3", ".wav", ".ogg", ".flac"]);
+const CLEANUP_MINUTES = Number(process.env.UPLOAD_RETENTION_MINUTES || 60);
+const supported = new Set([".mp3", ".wav", ".ogg", ".flac"]);
 
 const storage = multer.diskStorage({
   destination: (_, __, cb) => cb(null, uploadsDir),
   filename: (_, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
+    const ext = path.extname(file.originalname).toLowerCase() || ".bin";
     cb(null, `${Date.now()}-${crypto.randomUUID()}${ext}`);
   }
 });
@@ -36,8 +40,12 @@ const upload = multer({
   storage,
   limits: { fileSize: MAX_MB * 1024 * 1024 },
   fileFilter: (_, file, cb) => {
+    // Accept audio/* and unknown extensions here. FFmpeg will validate/convert it.
+    // This prevents the browser/server from rejecting convertible formats such as M4A, AAC, OPUS and WEBM.
+    const mime = String(file.mimetype || "").toLowerCase();
     const ext = path.extname(file.originalname).toLowerCase();
-    cb(null, allowed.has(ext));
+    if (mime.startsWith("audio/") || mime === "video/webm" || supported.has(ext)) return cb(null, true);
+    return cb(new Error("File harus berupa file audio yang dapat dibaca FFmpeg."));
   }
 });
 
@@ -53,9 +61,55 @@ function writeHistory(items) {
   fs.writeFileSync(historyFile, JSON.stringify(items.slice(0, 100), null, 2));
 }
 
+function safeUnlink(filePath) {
+  try { fs.unlinkSync(filePath); } catch {}
+}
+
+async function convertToRobloxMp3(inputPath) {
+  const ext = path.extname(inputPath).toLowerCase();
+  if (supported.has(ext)) return { filePath: inputPath, converted: false };
+
+  const outputPath = path.join(uploadsDir, `${path.basename(inputPath, ext)}-converted.mp3`);
+  await execFileAsync("ffmpeg", [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-i", inputPath,
+    "-vn",
+    "-ac", "2",
+    "-ar", "44100",
+    "-b:a", "192k",
+    outputPath
+  ], { maxBuffer: 1024 * 1024 * 4 });
+
+  const stat = fs.statSync(outputPath);
+  if (!stat.size) throw new Error("FFmpeg menghasilkan file audio kosong.");
+  if (stat.size > MAX_MB * 1024 * 1024) {
+    safeUnlink(outputPath);
+    throw new Error(`Hasil konversi terlalu besar. Maksimal ${MAX_MB} MB.`);
+  }
+
+  return { filePath: outputPath, converted: true };
+}
+
+function cleanupOldUploads() {
+  const cutoff = Date.now() - CLEANUP_MINUTES * 60 * 1000;
+  for (const name of fs.readdirSync(uploadsDir)) {
+    const filePath = path.join(uploadsDir, name);
+    try {
+      const stat = fs.statSync(filePath);
+      if (stat.isFile() && stat.mtimeMs < cutoff) safeUnlink(filePath);
+    } catch {}
+  }
+}
+
+cleanupOldUploads();
+setInterval(cleanupOldUploads, 15 * 60 * 1000).unref();
+
 app.get("/api/config", (_, res) => {
   res.json({
     maxFileSizeMb: MAX_MB,
+    cleanupMinutes: CLEANUP_MINUTES,
+    supportedFormats: ["MP3", "WAV", "OGG", "FLAC"],
+    autoConvert: true,
     robloxConfigured: Boolean(process.env.ROBLOX_API_KEY && process.env.ROBLOX_USER_ID),
     telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID)
   });
@@ -70,19 +124,15 @@ app.post("/api/upload", upload.single("audio"), async (req, res) => {
     return res.status(400).json({ error: "File audio tidak valid atau belum dipilih." });
   }
 
-  const ext = path.extname(req.file.originalname).toLowerCase();
-  if (!allowed.has(ext)) {
-    fs.unlinkSync(req.file.path);
-    return res.status(400).json({ error: "Format harus MP3, WAV, OGG, atau FLAC." });
-  }
-
+  const originalExt = path.extname(req.file.originalname).toLowerCase();
   const id = crypto.randomUUID();
   const record = {
     id,
-    name: req.body.name?.trim() || path.basename(req.file.originalname, ext),
+    name: req.body.name?.trim() || path.basename(req.file.originalname, originalExt),
     originalName: req.file.originalname,
     size: req.file.size,
     createdAt: new Date().toISOString(),
+    conversion: { status: supported.has(originalExt) ? "not_needed" : "pending" },
     roblox: { status: "pending" },
     telegram: { status: "pending" }
   };
@@ -101,8 +151,10 @@ app.post("/api/upload", upload.single("audio"), async (req, res) => {
       item.error = err.message;
       item.roblox.status = item.roblox.status === "pending" ? "failed" : item.roblox.status;
       item.telegram.status = item.telegram.status === "pending" ? "failed" : item.telegram.status;
+      if (item.conversion?.status === "pending") item.conversion.status = "failed";
       writeHistory(h);
     }
+    safeUnlink(req.file.path);
   });
 });
 
@@ -112,66 +164,110 @@ app.get("/api/history/:id", (req, res) => {
   res.json(item);
 });
 
-async function processAudio(record, filePath) {
-  const history = readHistory();
-  const item = history.find(x => x.id === record.id);
-  if (!item) return;
+async function processAudio(record, originalFilePath) {
+  let workingFilePath = originalFilePath;
+  let convertedFilePath = null;
+  try {
+    let history = readHistory();
+    let item = history.find(x => x.id === record.id);
+    if (!item) return;
 
-  // Telegram is attempted independently from Roblox.
-  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
-    try {
-      item.telegram.status = "uploading";
+    const originalExt = path.extname(record.originalName).toLowerCase();
+    if (!supported.has(originalExt)) {
+      item.conversion = { status: "converting", from: originalExt || "unknown", to: "mp3" };
       writeHistory(history);
-      const result = await sendAudioToTelegram(filePath, record.originalName, {
-        caption: `🎵 Roblox Music\n\n${record.name}\n${record.originalName}`
-      });
-      item.telegram = { status: "sent", messageId: result.message_id };
-    } catch (e) {
-      item.telegram = { status: "failed", error: e.message };
-    }
-    writeHistory(history);
-  } else {
-    item.telegram = { status: "skipped", error: "Telegram belum dikonfigurasi." };
-    writeHistory(history);
-  }
-
-  if (process.env.ROBLOX_API_KEY && process.env.ROBLOX_USER_ID) {
-    try {
-      item.roblox.status = "uploading";
+      const converted = await convertToRobloxMp3(originalFilePath);
+      workingFilePath = converted.filePath;
+      convertedFilePath = converted.filePath;
+      history = readHistory();
+      item = history.find(x => x.id === record.id);
+      if (!item) return;
+      item.conversion = { status: "completed", from: originalExt || "unknown", to: "mp3" };
       writeHistory(history);
-
-      const result = await uploadAudioToRoblox({
-        filePath,
-        displayName: record.name,
-        description: `Uploaded with Roblox Music Uploader — ${record.originalName}`,
-        userId: process.env.ROBLOX_USER_ID,
-        apiKey: process.env.ROBLOX_API_KEY
-      });
-
-      item.roblox = {
-        status: result.status,
-        assetId: result.assetId || null,
-        operationId: result.operationId || null,
-        error: result.error || null
-      };
-    } catch (e) {
-      item.roblox = { status: "failed", error: e.message };
     }
-    writeHistory(history);
-  } else {
-    item.roblox = { status: "skipped", error: "Roblox Open Cloud belum dikonfigurasi." };
-    writeHistory(history);
-  }
 
-  // Keep uploaded files only temporarily.
-  try { fs.unlinkSync(filePath); } catch {}
+    // Telegram is the persistent storage copy. It is sent before the local files are removed.
+    if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+      try {
+        history = readHistory();
+        item = history.find(x => x.id === record.id);
+        item.telegram.status = "uploading";
+        writeHistory(history);
+        const telegramName = path.basename(workingFilePath).endsWith(".mp3") && !supported.has(originalExt)
+          ? `${path.basename(record.originalName, originalExt)}.mp3`
+          : record.originalName;
+        const result = await sendAudioToTelegram(workingFilePath, telegramName, {
+          caption: `🎵 Roblox Music\n\n${record.name}\nOriginal: ${record.originalName}${!supported.has(originalExt) ? "\nConverted: MP3" : ""}`
+        });
+        history = readHistory();
+        item = history.find(x => x.id === record.id);
+        item.telegram = {
+          status: "sent",
+          messageId: result.message_id,
+          fileId: result.audio?.file_id || null
+        };
+        writeHistory(history);
+      } catch (e) {
+        history = readHistory();
+        item = history.find(x => x.id === record.id);
+        item.telegram = { status: "failed", error: e.message };
+        writeHistory(history);
+      }
+    } else {
+      history = readHistory();
+      item = history.find(x => x.id === record.id);
+      item.telegram = { status: "skipped", error: "Telegram belum dikonfigurasi." };
+      writeHistory(history);
+    }
+
+    if (process.env.ROBLOX_API_KEY && process.env.ROBLOX_USER_ID) {
+      try {
+        history = readHistory();
+        item = history.find(x => x.id === record.id);
+        item.roblox.status = "uploading";
+        writeHistory(history);
+
+        const result = await uploadAudioToRoblox({
+          filePath: workingFilePath,
+          displayName: record.name,
+          description: `Uploaded with Roblox Music Uploader — ${record.originalName}`,
+          userId: process.env.ROBLOX_USER_ID,
+          apiKey: process.env.ROBLOX_API_KEY
+        });
+
+        history = readHistory();
+        item = history.find(x => x.id === record.id);
+        item.roblox = {
+          status: result.status,
+          assetId: result.assetId || null,
+          operationId: result.operationId || null,
+          error: result.error || null
+        };
+        writeHistory(history);
+      } catch (e) {
+        history = readHistory();
+        item = history.find(x => x.id === record.id);
+        item.roblox = { status: "failed", error: e.message };
+        writeHistory(history);
+      }
+    } else {
+      history = readHistory();
+      item = history.find(x => x.id === record.id);
+      item.roblox = { status: "skipped", error: "Roblox Open Cloud belum dikonfigurasi." };
+      writeHistory(history);
+    }
+  } finally {
+    // Local storage is temporary only. Telegram is the persistent copy.
+    safeUnlink(originalFilePath);
+    if (convertedFilePath && convertedFilePath !== originalFilePath) safeUnlink(convertedFilePath);
+  }
 }
 
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     return res.status(400).json({ error: err.code === "LIMIT_FILE_SIZE" ? `File terlalu besar. Maksimal ${MAX_MB} MB.` : err.message });
   }
-  if (err) return res.status(500).json({ error: err.message });
+  if (err) return res.status(400).json({ error: err.message });
   next();
 });
 

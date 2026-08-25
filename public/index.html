@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Roblox Music Uploader</title>
   <meta name="description" content="Upload, preview, send to Telegram and publish Roblox audio.">
+  <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -17,6 +18,7 @@
       <span><b>ROBLOX</b> MUSIC <em>LAB</em></span>
     </a>
     <div class="top-actions">
+      <span id="clock" class="time-pill">--:--:--</span>
       <span id="serverBadge" class="status-pill"><i></i> Checking...</span>
       <button id="themeBtn" class="icon-btn" title="Toggle theme">☼</button>
     </div>
@@ -39,7 +41,7 @@
     <section class="grid">
       <div class="panel upload-panel">
         <div class="panel-head">
-          <div><span class="section-icon">↑</span><div><h2>Upload track</h2><p>MP3, WAV, OGG or FLAC</p></div></div>
+          <div><span class="section-icon">↑</span><div><h2>Upload track</h2><p>Supported formats or automatic conversion</p></div></div>
           <span id="limitLabel" class="muted">Max 20 MB</span>
         </div>
 
@@ -48,7 +50,7 @@
           <div class="drop-icon">♫</div>
           <h3>Drop your music here</h3>
           <p>or <u>browse files</u> from your computer</p>
-          <span class="format">MP3 · WAV · OGG · FLAC</span>
+          <span class="format">MP3 · WAV · OGG · FLAC · M4A · AAC · OPUS · WEBM · MORE</span>
         </label>
 
         <div id="selected" class="selected hidden">
@@ -87,7 +89,7 @@
         <div class="service" id="telegramService">
           <div class="service-logo tg">✈</div><div><strong>Telegram</strong><span id="telegramText">Checking...</span></div><i class="dot"></i>
         </div>
-        <div class="tip"><b>Tip</b><p>Keep your API keys in <code>.env</code>. Never put them in frontend JavaScript or Git.</p></div>
+        <div class="tip"><b>Storage</b><p>File di server hanya sementara. Setelah diproses, file lokal otomatis dihapus. Telegram menjadi penyimpanan salinan audio.</p></div>
       </aside>
     </section>
 
