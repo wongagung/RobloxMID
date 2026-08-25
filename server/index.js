@@ -7,7 +7,7 @@ import crypto from "crypto";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
-import { uploadAudioToRoblox } from "./roblox.js";
+import { uploadAudioToRoblox, getAssetModerationStatus } from "./roblox.js";
 import { sendAudioToTelegram } from "./telegram.js";
 
 const execFileAsync = promisify(execFile);
@@ -166,6 +166,45 @@ app.post("/api/upload", upload.single("audio"), async (req, res) => {
   });
 });
 
+async function pollModeration(recordId, assetId) {
+  const apiKey = process.env.ROBLOX_API_KEY;
+  if (!apiKey) return;
+  const intervalMs = Math.max(5000, Number(process.env.ROBLOX_MODERATION_POLL_MS || 30000));
+  const maxAttempts = Math.max(1, Number(process.env.ROBLOX_MODERATION_MAX_ATTEMPTS || 20));
+
+  for (let i = 0; i < maxAttempts; i++) {
+    await new Promise(resolve => setTimeout(resolve, intervalMs));
+    let state;
+    try {
+      state = await getAssetModerationStatus(assetId, apiKey);
+    } catch (e) {
+      console.error(`[Moderation] Poll failed for asset ${assetId}:`, e.message);
+      return;
+    }
+    const history = readHistory();
+    const item = history.find(x => x.id === recordId);
+    if (!item) return;
+    item.roblox.moderation = state || item.roblox.moderation;
+    writeHistory(history);
+    if (state === "approved" || state === "rejected") return;
+  }
+}
+
+app.post("/api/roblox/moderation/:id/refresh", async (req, res) => {
+  const history = readHistory();
+  const item = history.find(x => x.id === req.params.id);
+  if (!item?.roblox?.assetId) return res.status(404).json({ error: "Asset tidak ditemukan." });
+  if (!process.env.ROBLOX_API_KEY) return res.status(400).json({ error: "Roblox API key belum dikonfigurasi." });
+  try {
+    const state = await getAssetModerationStatus(item.roblox.assetId, process.env.ROBLOX_API_KEY);
+    item.roblox.moderation = state || item.roblox.moderation;
+    writeHistory(history);
+    res.json({ moderation: item.roblox.moderation });
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 app.get("/api/history/:id", (req, res) => {
   const item = readHistory().find(x => x.id === req.params.id);
   if (!item) return res.status(404).json({ error: "Item tidak ditemukan." });
@@ -249,9 +288,18 @@ async function processAudio(record, originalFilePath) {
           status: result.status,
           assetId: result.assetId || null,
           operationId: result.operationId || null,
+          moderation: result.moderation || (result.assetId ? "reviewing" : null),
           error: result.error || null
         };
         writeHistory(history);
+
+        // Asset creation succeeding doesn't mean Roblox's content moderation
+        // has finished — that can take a bit longer, so poll it separately.
+        if (result.assetId && item.roblox.moderation !== "approved" && item.roblox.moderation !== "rejected") {
+          pollModeration(record.id, result.assetId).catch(e =>
+            console.error("Moderation poll error:", e.message)
+          );
+        }
       } catch (e) {
         history = readHistory();
         item = history.find(x => x.id === record.id);
@@ -282,6 +330,3 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Roblox Music Uploader running on http://0.0.0.0:${PORT}`);
 });
-
-// Advanced editor parameter endpoint
-app.post("/api/audio/edit", upload.single("file"), async (req,res)=>{ try { if(!req.file) return res.status(400).json({ok:false,message:"No audio file"}); res.json({ok:true,message:"Audio edit parameters received",file:req.file.filename,gain:req.body.gain??0,speed:req.body.speed??1,fadeIn:req.body.fadeIn??0,fadeOut:req.body.fadeOut??0}); } catch(e){res.status(500).json({ok:false,message:e.message});} });

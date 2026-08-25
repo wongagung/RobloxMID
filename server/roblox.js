@@ -117,6 +117,22 @@ async function robloxRequest(url, options = {}) {
   return data;
 }
 
+function normalizeModerationState(state) {
+  if (!state) return null;
+  const s = String(state).toUpperCase();
+  if (s.includes("APPROV")) return "approved";
+  if (s.includes("REJECT")) return "rejected";
+  return "reviewing";
+}
+
+export async function getAssetModerationStatus(assetId, apiKey) {
+  const data = await robloxRequest(
+    `${API_BASE}/assets/v1/assets/${encodeURIComponent(assetId)}`,
+    { method: "GET", headers: { "x-api-key": apiKey } }
+  );
+  return normalizeModerationState(data?.moderationResult?.moderationState);
+}
+
 export async function uploadAudioToRoblox({
   filePath,
   displayName,
@@ -245,7 +261,8 @@ export async function uploadAudioToRoblox({
         return {
           status: "completed",
           operationId: null,
-          assetId: String(directAssetId)
+          assetId: String(directAssetId),
+          moderation: normalizeModerationState(created?.moderationResult?.moderationState)
         };
       }
 
@@ -324,7 +341,8 @@ export async function uploadAudioToRoblox({
       return {
         status: "completed",
         operationId,
-        assetId: String(assetId)
+        assetId: String(assetId),
+        moderation: normalizeModerationState(op?.response?.moderationResult?.moderationState)
       };
     }
 
