@@ -14,6 +14,29 @@ async function api(url, options) {
   return data;
 }
 
+function clampAssetName(name) {
+  let n = (name || "").trim();
+  if (n.length > 50) n = n.slice(0, 50).trim();
+  if (n.length < 3) n = (n + " Track").slice(0, 50);
+  return n;
+}
+
+function isAssetNameValid() {
+  const len = assetName.value.trim().length;
+  return len >= 3 && len <= 50;
+}
+
+function refreshUploadButton() {
+  const valid = Boolean(selectedFile) && isAssetNameValid();
+  uploadBtn.disabled = !valid;
+  $("#assetNameHint").classList.toggle("hint-error", assetName.value.trim().length > 0 && !isAssetNameValid());
+}
+
+assetName.addEventListener("input", () => {
+  $("#assetNameHint").textContent = isAssetNameValid() ? "3–50 karakter" : `${assetName.value.trim().length}/50 karakter — minimal 3`;
+  refreshUploadButton();
+});
+
 function toast(msg, type="") {
   const el = $("#toast");
   el.textContent = msg;
@@ -36,10 +59,10 @@ function selectFile(file) {
   $("#fileName").textContent = file.name;
   const ext = (file.name.match(/\.([^.]+)$/) || ["", "?"])[1].toUpperCase();
   $("#fileMeta").textContent = `${formatSize(file.size)} · ${ext}`;
-  $("#assetName").value = file.name.replace(/\.[^/.]+$/, "");
+  $("#assetName").value = clampAssetName(file.name.replace(/\.[^/.]+$/, ""));
   selected.classList.remove("hidden");
   dropzone.classList.add("has-file");
-  uploadBtn.disabled = false;
+  refreshUploadButton();
   if (lastObjectUrl) URL.revokeObjectURL(lastObjectUrl);
   lastObjectUrl = URL.createObjectURL(file);
   audio.src = lastObjectUrl;
@@ -80,7 +103,7 @@ window.MusicLabTrack = {
     const ext = (file.name.match(/\.([^.]+)$/) || ["", "?"])[1].toUpperCase();
     $("#fileName").textContent = file.name;
     $("#fileMeta").textContent = `${formatSize(file.size)} · ${ext}`;
-    uploadBtn.disabled = false;
+    refreshUploadButton();
   }
 };
 
@@ -149,7 +172,7 @@ uploadBtn.onclick = () => {
   if (!selectedFile) return;
   const fd = new FormData();
   fd.append("audio", selectedFile);
-  fd.append("name", assetName.value.trim() || selectedFile.name);
+  fd.append("name", clampAssetName(assetName.value.trim() || selectedFile.name));
 
   uploadBtn.disabled = true;
   $("#progressWrap").classList.remove("hidden");
@@ -178,9 +201,9 @@ uploadBtn.onclick = () => {
       let msg="Upload gagal"; try { msg=JSON.parse(xhr.responseText).error } catch {}
       toast(msg, "error");
     }
-    uploadBtn.disabled = false;
+    refreshUploadButton();
   };
-  xhr.onerror = () => { toast("Network error.", "error"); uploadBtn.disabled=false; };
+  xhr.onerror = () => { toast("Network error.", "error"); refreshUploadButton(); };
   xhr.send(fd);
 };
 
@@ -192,12 +215,19 @@ $("#themeBtn").onclick = () => {
 if (localStorage.theme === "light") document.body.classList.add("light");
 
 (async function init(){
+  const clockFmt = new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   function updateClock(){
     const now = new Date();
-    $("#clock").textContent = new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(now);
+    $("#clock").innerHTML = clockFmt.formatToParts(now)
+      .map(p => p.type === "literal" ? `<span class="clock-colon">${p.value}</span>` : p.value)
+      .join("");
   }
   updateClock();
   setInterval(updateClock, 1000);
+
+  window.addEventListener("scroll", () => {
+    document.querySelector(".topbar").classList.toggle("is-scrolled", window.scrollY > 8);
+  }, { passive: true });
 
   try {
     const cfg = await api("/api/config");

@@ -52,6 +52,13 @@ const upload = multer({
 app.use(express.json());
 app.use(express.static(path.join(root, "public")));
 
+function clampAssetName(name) {
+  let n = String(name || "").trim();
+  if (n.length > 50) n = n.slice(0, 50).trim();
+  if (n.length < 3) n = (n + " Track").slice(0, 50);
+  return n;
+}
+
 function readHistory() {
   try { return JSON.parse(fs.readFileSync(historyFile, "utf8")); }
   catch { return []; }
@@ -136,7 +143,7 @@ app.post("/api/upload", upload.single("audio"), async (req, res) => {
   const id = crypto.randomUUID();
   const record = {
     id,
-    name: req.body.name?.trim() || path.basename(req.file.originalname, originalExt),
+    name: clampAssetName(req.body.name?.trim() || path.basename(req.file.originalname, originalExt)),
     originalName: req.file.originalname,
     size: req.file.size,
     createdAt: new Date().toISOString(),

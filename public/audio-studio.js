@@ -23,6 +23,13 @@
   const specCanvas = document.getElementById("editorSpectrum");
 
   const controls = [gainEl, fadeInEl, fadeOutEl, speedEl];
+  const pairs = [
+    { range: gainEl, val: gainVal },
+    { range: fadeInEl, val: fadeInVal },
+    { range: fadeOutEl, val: fadeOutVal },
+    { range: speedEl, val: speedVal }
+  ];
+  const valueInputs = pairs.map(p => p.val);
 
   let audioCtx = null;
   let analyser = null;
@@ -39,16 +46,14 @@
 
   function setControlsEnabled(enabled) {
     controls.forEach(el => (el.disabled = !enabled));
+    valueInputs.forEach(el => (el.disabled = !enabled));
     previewBtn.disabled = !enabled;
     applyBtn.disabled = !enabled;
     resetBtn.disabled = !enabled;
   }
 
   function updateBubbles() {
-    gainVal.textContent = `${gainEl.value} dB`;
-    fadeInVal.textContent = `${parseFloat(fadeInEl.value).toFixed(1)}s`;
-    fadeOutVal.textContent = `${parseFloat(fadeOutEl.value).toFixed(1)}s`;
-    speedVal.textContent = `${parseFloat(speedEl.value).toFixed(1)}x`;
+    pairs.forEach(p => { p.val.value = parseFloat(p.range.value).toFixed(2); });
   }
   updateBubbles();
 
@@ -234,6 +239,24 @@
       else applyLiveGain();
     }
   }));
+
+  // Let the number box next to each slider be typed into directly.
+  pairs.forEach(({ range, val }) => {
+    const commit = () => {
+      const min = parseFloat(range.min), max = parseFloat(range.max);
+      let v = parseFloat(val.value);
+      if (Number.isNaN(v)) v = parseFloat(range.value);
+      v = Math.min(max, Math.max(min, v));
+      range.value = v;
+      val.value = v.toFixed(2);
+      if (isPreviewing) {
+        if (range === speedEl) audioEl.playbackRate = parseFloat(speedEl.value) || 1;
+        else applyLiveGain();
+      }
+    };
+    val.addEventListener("change", commit);
+    val.addEventListener("keydown", e => { if (e.key === "Enter") val.blur(); });
+  });
 
   function startPreview() {
     if (!originalFile) { say("Pilih file audio dulu.", "error"); return; }
