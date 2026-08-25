@@ -28,6 +28,55 @@ function safeDeleteFile(filePath) {
   }
 }
 
+function createMultipartBody({
+  request,
+  fileBuffer,
+  fileName,
+  fileContentType
+}) {
+  const boundary =
+    `----RobloxMIDBoundary${Date.now()}${Math.random()
+      .toString(16)
+      .slice(2)}`;
+
+  const CRLF = "\r\n";
+  const parts = [];
+
+  parts.push(
+    Buffer.from(
+      `--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="request"${CRLF}` +
+      `Content-Type: application/json${CRLF}` +
+      CRLF +
+      JSON.stringify(request) +
+      CRLF
+    )
+  );
+
+  parts.push(
+    Buffer.from(
+      `--${boundary}${CRLF}` +
+      `Content-Disposition: form-data; name="fileContent"; filename="${fileName}"${CRLF}` +
+      `Content-Type: ${fileContentType}${CRLF}` +
+      CRLF
+    )
+  );
+
+  parts.push(fileBuffer);
+
+  parts.push(
+    Buffer.from(
+      CRLF +
+      `--${boundary}--${CRLF}`
+    )
+  );
+
+  return {
+    body: Buffer.concat(parts),
+    contentType: `multipart/form-data; boundary=${boundary}`
+  };
+}
+
 async function robloxRequest(url, options = {}) {
   let response;
 
@@ -47,9 +96,7 @@ async function robloxRequest(url, options = {}) {
     try {
       data = JSON.parse(text);
     } catch {
-      data = {
-        raw: text
-      };
+      data = { raw: text };
     }
   }
 
@@ -110,7 +157,6 @@ export async function uploadAudioToRoblox({
       throw new Error(`File kosong: ${filePath}`);
     }
 
-    // Roblox Assets API membatasi upload create asset sampai 20 MB.
     if (stat.size > 20 * 1024 * 1024) {
       throw new Error("Roblox audio upload dibatasi 20 MB.");
     }
@@ -124,11 +170,11 @@ export async function uploadAudioToRoblox({
       );
     }
 
-    console.log(
-      `[Roblox] Preparing upload: ${path.basename(filePath)} (${stat.size} bytes)`
-    );
+    const fileBuffer = fs.readFileSync(filePath);
 
-    const bytes = fs.readFileSync(filePath);
+    console.log(
+      `[Roblox] Preparing upload: ${path.basename(filePath)} (${fileBuffer.length} bytes)`
+    );
 
     const request = {
       assetType: "Audio",
@@ -141,36 +187,19 @@ export async function uploadAudioToRoblox({
       }
     };
 
-    /*
-     * Roblox Create Asset API menerima multipart/form-data:
-     *
-     * request     -> JSON metadata
-     * fileContent -> binary asset
-     *
-     * Jangan set Content-Type secara manual.
-     * fetch akan membuat multipart boundary secara otomatis.
-     */
-    const form = new FormData();
+    const multipart = createMultipartBody({
+      request,
+      fileBuffer,
+      fileName: `${displayName}${ext}`,
+      fileContentType: mimeType
+    });
 
-    const requestBlob = new Blob(
-      [JSON.stringify(request)],
-      {
-        type: "application/json"
-      }
+    console.log(
+      `[Roblox] Multipart content-type: ${multipart.contentType}`
     );
 
-    const fileBlob = new Blob(
-      [bytes],
-      {
-        type: mimeType
-      }
-    );
-
-    form.append("request", requestBlob);
-    form.append(
-      "fileContent",
-      fileBlob,
-      `${displayName}${ext}`
+    console.log(
+      `[Roblox] Multipart content-length: ${multipart.body.length}`
     );
 
     console.log("[Roblox] Sending Create Asset request...");
@@ -182,9 +211,11 @@ export async function uploadAudioToRoblox({
       {
         method: "POST",
         headers: {
-          "x-api-key": apiKey
+          "x-api-key": apiKey,
+          "Content-Type": multipart.contentType,
+          "Content-Length": String(multipart.body.length)
         },
-        body: form
+        body: multipart.body
       }
     );
 
@@ -193,22 +224,11 @@ export async function uploadAudioToRoblox({
       JSON.stringify(created)
     );
 
-    /*
-     * Roblox biasanya mengembalikan:
-     * {
-     *   "path": "operations/xxxx"
-     * }
-     *
-     * Ambil operationId dari response.
-     */
     const operationId =
       created?.operationId ||
       created?.path?.split("/").pop() ||
       null;
 
-    /*
-     * Pada beberapa response, asset bisa langsung tersedia.
-     */
     const directAssetId =
       created?.assetId ||
       created?.asset?.assetId ||
@@ -230,9 +250,7 @@ export async function uploadAudioToRoblox({
       }
 
       throw new Error(
-        `Roblox tidak mengembalikan operationId maupun assetId. Response: ${JSON.stringify(
-          created
-        )}`
+        `Roblox tidak mengembalikan operationId maupun assetId. Response: ${JSON.stringify(created)}`
       );
     }
 
@@ -253,39 +271,19 @@ export async function uploadAudioToRoblox({
     const started = Date.now();
 
     while (Date.now() - started < timeout) {
-      await new Promise((resolve) =>
+      await new Promise(resolve =>
         setTimeout(resolve, interval)
       );
 
-      let op;
-
-      try {
-        /*
-         * PENTING:
-         * Endpoint operation untuk Assets API adalah:
-         *
-         * /assets/v1/operations/{operationId}
-         *
-         * bukan /cloud/v2/operations/{operationId}
-         */
-        op = await robloxRequest(
-          `${API_BASE}/assets/v1/operations/${encodeURIComponent(
-            operationId
-          )}`,
-          {
-            method: "GET",
-            headers: {
-              "x-api-key": apiKey
-            }
+      const op = await robloxRequest(
+        `${API_BASE}/assets/v1/operations/${encodeURIComponent(operationId)}`,
+        {
+          method: "GET",
+          headers: {
+            "x-api-key": apiKey
           }
-        );
-      } catch (error) {
-        throw new Error(
-          `Gagal mengecek status upload Roblox (${operationId}): ${
-            error?.message || error
-          }`
-        );
-      }
+        }
+      );
 
       console.log(
         `[Roblox] Operation status: ${JSON.stringify(op)}`
@@ -295,9 +293,6 @@ export async function uploadAudioToRoblox({
         continue;
       }
 
-      /*
-       * Kalau Roblox menyatakan operation gagal.
-       */
       if (op?.error) {
         const errorMessage =
           op.error?.message ||
@@ -318,9 +313,7 @@ export async function uploadAudioToRoblox({
 
       if (!assetId) {
         throw new Error(
-          `Roblox operation selesai tetapi assetId tidak ditemukan. Response: ${JSON.stringify(
-            op
-          )}`
+          `Roblox operation selesai tetapi assetId tidak ditemukan. Response: ${JSON.stringify(op)}`
         );
       }
 
@@ -335,10 +328,6 @@ export async function uploadAudioToRoblox({
       };
     }
 
-    /*
-     * Jangan menganggap timeout sebagai upload gagal.
-     * Operation Roblox masih bisa sedang berjalan.
-     */
     console.warn(
       `[Roblox] Upload masih processing setelah ${timeout}ms. Operation ID: ${operationId}`
     );
@@ -348,19 +337,10 @@ export async function uploadAudioToRoblox({
       operationId
     };
   } catch (error) {
-    const message = error?.message || String(error);
-
     console.error(
-      `[Roblox] Upload failed: ${message}`
+      `[Roblox] Upload failed: ${error?.message || error}`
     );
 
-    /*
-     * Hapus file lokal hanya ketika proses upload benar-benar
-     * mengalami error.
-     *
-     * Jangan hapus ketika status = "processing", karena Roblox
-     * masih mungkin menyelesaikan operation tersebut.
-     */
     if (uploadStarted) {
       safeDeleteFile(filePath);
     }
