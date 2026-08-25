@@ -1,0 +1,7 @@
+
+Final overwrite package.
+Existing project preserved. Added Advanced Studio integration assets.
+Deploy:
+unzip -o RobloxMID-FINAL-COMPLETE.zip
+docker compose down
+docker compose up -d --build
