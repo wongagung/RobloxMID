@@ -1,0 +1,12 @@
+services:
+  roblox-music-uploader:
+    build: .
+    container_name: roblox-music-uploader
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "8787:8787"
+    volumes:
+      - ./uploads:/app/uploads
+      - ./data:/app/data
