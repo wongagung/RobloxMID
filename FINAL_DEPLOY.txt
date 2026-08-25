@@ -1,8 +1,0 @@
-FINAL DIRECT OVERWRITE
-
-Deploy:
-unzip -o RobloxMID-FINAL-DIRECT.zip
-docker compose down
-docker compose up -d --build
-
-This package modifies the real public/index.html from the current project.

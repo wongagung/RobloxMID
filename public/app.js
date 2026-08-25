@@ -181,3 +181,19 @@ if (localStorage.theme === "light") document.body.classList.add("light");
   refresh();
   setInterval(refresh, 7000);
 })();
+// Advanced editor integration
+(function(){
+ const file=document.getElementById("fileInput");
+ const status=document.getElementById("editorStatus");
+ if(file){
+   file.addEventListener("change",()=>{
+     if(file.files.length && status)
+       status.textContent="🎵 Audio loaded - editor ready";
+   });
+ }
+ const preview=document.getElementById("editorPreview");
+ if(preview) preview.onclick=()=>{
+   const audio=document.getElementById("audio");
+   if(audio) audio.play();
+ };
+})();
