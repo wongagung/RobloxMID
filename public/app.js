@@ -1,3 +1,4 @@
+(()=>{const s={audio:new Audio(),ctx:null,src:null,gain:null,analyser:null,url:null,duration:0};const $=id=>document.getElementById(id), panel=$('audioEditorPanel'),canvas=$('audioSpectrum'),g=canvas?.getContext('2d');if(!panel||!canvas)return;const state=(t,c='idle')=>{const e=$('audioEditorState');e.textContent=t;e.className='audio-editor-state '+c};const fmt=t=>{if(!isFinite(t))return'00:00';let m=Math.floor(t/60),ss=Math.floor(t%60).toString().padStart(2,'0');return String(m).padStart(2,'0')+':'+ss};function graph(){if(!s.analyser||!g)return;let d=new Uint8Array(s.analyser.frequencyBinCount);const loop=()=>{requestAnimationFrame(loop);s.analyser.getByteFrequencyData(d);g.clearRect(0,0,canvas.width,canvas.height);let grd=g.createLinearGradient(0,0,canvas.width,0);grd.addColorStop(0,'#6b5cff');grd.addColorStop(1,'#26c6ff');g.fillStyle=grd;let step=Math.max(1,Math.floor(d.length/120)),bw=canvas.width/120;for(let i=0,x=0;i<d.length;i+=step,x++){let h=Math.max(2,d[i]/255*(canvas.height-20));g.fillRect(x*bw,canvas.height-h,Math.max(1,bw-2),h)}};loop()}function ctx(){if(s.ctx)return;s.ctx=new(window.AudioContext||window.webkitAudioContext)();s.src=s.ctx.createMediaElementSource(s.audio);s.gain=s.ctx.createGain();s.analyser=s.ctx.createAnalyser();s.analyser.fftSize=2048;s.src.connect(s.gain);s.gain.connect(s.analyser);s.analyser.connect(s.ctx.destination);graph()}function ready(){panel.classList.remove('is-hidden');state('READY','ready')}function loadFile(f){if(!f)return;s.file=f;if(s.url)URL.revokeObjectURL(s.url);s.url=URL.createObjectURL(f);s.audio.src=s.url;s.audio.load();$('audioEditorSource').textContent=f.name;ready();try{ctx()}catch{}}$('audioEditorFile')?.addEventListener('change',e=>loadFile(e.target.files?.[0]));$('audioEditorLoadBtn')?.addEventListener('click',()=>{let f=$('audioEditorFile').files?.[0],u=$('audioEditorUrl').value.trim();if(f)loadFile(f);else if(u){panel.classList.remove('is-hidden');$('audioEditorSource').textContent=u;state('URL','ready');$('audioEditorMessage').textContent='URL loaded; use the existing server URL importer to resolve it.'}else $('audioEditorMessage').textContent='Choose a file or enter a URL.'});['audioGain','audioSpeed','audioFadeIn','audioFadeOut'].forEach(id=>$(id)?.addEventListener('input',()=>{let gd=+$('audioGain').value; $('audioGainValue').value=gd.toFixed(1)+' dB';$('audioSpeedValue').value=(+$('audioSpeed').value).toFixed(2)+'x';$('audioFadeInValue').value=(+$('audioFadeIn').value).toFixed(1)+'s';$('audioFadeOutValue').value=(+$('audioFadeOut').value).toFixed(1)+'s';if(s.gain)s.gain.gain.value=Math.pow(10,gd/20);s.audio.playbackRate=+$('audioSpeed').value}));$('audioPreviewBtn')?.addEventListener('click',async()=>{if(!s.audio.src){$('audioEditorMessage').textContent='Load audio first.';return}ctx();if(s.ctx.state==='suspended')await s.ctx.resume();s.audio.play();state('PLAYING','playing')});$('audioStopBtn')?.addEventListener('click',()=>{s.audio.pause();s.audio.currentTime=0;state('READY','ready')});$('audioResetBtn')?.addEventListener('click',()=>{['audioGain','audioFadeIn','audioFadeOut'].forEach(id=>$(id).value=0);$('audioSpeed').value=1;$('audioGain').dispatchEvent(new Event('input'));$('audioEditorMessage').textContent='Reset.'});s.audio.addEventListener('loadedmetadata',()=>{s.duration=s.audio.duration;$('audioDuration').textContent=fmt(s.duration)});s.audio.addEventListener('timeupdate',()=>{$('audioCurrentTime').textContent=fmt(s.audio.currentTime);if(s.duration)$('audioSeek').value=Math.round(s.audio.currentTime/s.duration*1000)});$('audioSeek')?.addEventListener('input',()=>{if(s.duration)s.audio.currentTime=+$('audioSeek').value/1000*s.duration});$('audioApplyBtn')?.addEventListener('click',async()=>{if(!s.file){$('audioEditorMessage').textContent='Load a local file first.';return}state('PROCESSING','processing');let fd=new FormData();fd.append('file',s.file);fd.append('gain',$('audioGain').value);fd.append('speed',$('audioSpeed').value);fd.append('fadeIn',$('audioFadeIn').value);fd.append('fadeOut',$('audioFadeOut').value);try{let r=await fetch('/api/audio/edit',{method:'POST',body:fd});if(!r.ok)throw Error('HTTP '+r.status);let d=await r.json();$('audioEditorMessage').textContent=d.message||'Edit processed.';state('READY','ready')}catch(e){$('audioEditorMessage').textContent='Edit failed: '+e.message;state('ERROR','error')}});})();
 const $ = s => document.querySelector(s);
 const fileInput = $("#fileInput");
 const dropzone = $("#dropzone");
@@ -180,20 +181,4 @@ if (localStorage.theme === "light") document.body.classList.add("light");
   }
   refresh();
   setInterval(refresh, 7000);
-})();
-// Advanced editor integration
-(function(){
- const file=document.getElementById("fileInput");
- const status=document.getElementById("editorStatus");
- if(file){
-   file.addEventListener("change",()=>{
-     if(file.files.length && status)
-       status.textContent="🎵 Audio loaded - editor ready";
-   });
- }
- const preview=document.getElementById("editorPreview");
- if(preview) preview.onclick=()=>{
-   const audio=document.getElementById("audio");
-   if(audio) audio.play();
- };
 })();

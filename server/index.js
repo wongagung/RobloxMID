@@ -282,3 +282,6 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Roblox Music Uploader running on http://0.0.0.0:${PORT}`);
 });
+
+// Advanced editor parameter endpoint
+app.post("/api/audio/edit", upload.single("file"), async (req,res)=>{ try { if(!req.file) return res.status(400).json({ok:false,message:"No audio file"}); res.json({ok:true,message:"Audio edit parameters received",file:req.file.filename,gain:req.body.gain??0,speed:req.body.speed??1,fadeIn:req.body.fadeIn??0,fadeOut:req.body.fadeOut??0}); } catch(e){res.status(500).json({ok:false,message:e.message});} });
