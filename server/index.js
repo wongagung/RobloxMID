@@ -62,7 +62,15 @@ function writeHistory(items) {
 }
 
 function safeUnlink(filePath) {
-  try { fs.unlinkSync(filePath); } catch {}
+  if (!filePath) return;
+  try {
+    fs.unlinkSync(filePath);
+    console.log(`Deleted temporary file: ${filePath}`);
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      console.error(`Failed to delete temporary file: ${filePath}`, error);
+    }
+  }
 }
 
 async function convertToRobloxMp3(inputPath) {
