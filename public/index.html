@@ -105,5 +105,28 @@
 
   <div id="toast" class="toast"></div>
   <script src="/app.js"></script>
+
+<section id="sound-studio" class="sound-studio">
+<h2>🎚 Advanced Sound Studio</h2>
+<div id="sound-status">Waiting audio...</div>
+
+<div class="sound-load">
+<input id="sound-file" type="file" accept="audio/*">
+<input id="sound-url" placeholder="YouTube / SoundCloud URL">
+<button id="load-sound">Load Audio</button>
+</div>
+
+<div class="sound-tools">
+<label>Gain <input id="gain" type="range" min="-20" max="20" value="0"></label>
+<label>Fade In <input id="fade-in" type="range" min="0" max="10" value="0"></label>
+<label>Fade Out <input id="fade-out" type="range" min="0" max="10" value="0"></label>
+<label>Speed <input id="speed" type="range" min="0.5" max="2" step="0.1" value="1"></label>
+</div>
+
+<button id="apply-edit">Apply Edit</button>
+<div id="roblox-status"></div>
+</section>
+
+<script src="/all-in-one-editor.js"></script>
 </body>
 </html>
