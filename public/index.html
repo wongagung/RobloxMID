@@ -105,43 +105,5 @@
 
   <div id="toast" class="toast"></div>
   <script src="/app.js"></script>
-
-<section class="sound-editor-card">
-  <div class="editor-header">
-    <div>
-      <h2>🎚 Advanced Sound Studio</h2>
-      <p>Edit audio before sending to Roblox</p>
-    </div>
-    <span class="status-badge processing" id="roblox-status">PROCESSING</span>
-  </div>
-
-  <div class="wave-placeholder">
-    <span>♪ Audio waveform preview</span>
-  </div>
-
-  <div class="editor-grid">
-    <label>Gain
-      <input type="range" id="gain" min="-20" max="20" value="0">
-    </label>
-    <label>Fade In
-      <input type="range" id="fadeIn" min="0" max="10" value="0">
-    </label>
-    <label>Fade Out
-      <input type="range" id="fadeOut" min="0" max="10" value="0">
-    </label>
-    <label>Speed
-      <input type="range" id="speed" min="0.5" max="2" step="0.1" value="1">
-    </label>
-  </div>
-
-  <div class="editor-options">
-    <button>✂ Trim</button>
-    <button>🎛 EQ</button>
-    <button>🔊 Normalize</button>
-    <button>⚙ Compressor</button>
-    <button class="primary" onclick="applyAdvancedEdit()">Apply Edit</button>
-  </div>
-</section>
-
 </body>
 </html>

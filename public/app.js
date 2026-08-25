@@ -181,16 +181,3 @@ if (localStorage.theme === "light") document.body.classList.add("light");
   refresh();
   setInterval(refresh, 7000);
 })();
-async function applyAdvancedEdit(){
- const options={
-  gain:document.getElementById("gain").value,
-  fadeIn:document.getElementById("fadeIn").value,
-  fadeOut:document.getElementById("fadeOut").value,
-  speed:document.getElementById("speed").value
- };
- await fetch("/api/audio/edit",{
-  method:"POST",
-  headers:{"Content-Type":"application/json"},
-  body:JSON.stringify(options)
- });
-}
