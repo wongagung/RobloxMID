@@ -282,8 +282,3 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Roblox Music Uploader running on http://0.0.0.0:${PORT}`);
 });
-
-
-app.post("/api/audio/edit", async (req,res)=>{
- res.json({success:true,message:"Advanced editor ready"});
-});

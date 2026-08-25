@@ -105,16 +105,5 @@
 
   <div id="toast" class="toast"></div>
   <script src="/app.js"></script>
-
-<hr>
-<div id="advanced-editor-container">
-Loading Advanced Sound Editor...
-</div>
-<script>
-fetch('/advanced-editor.html')
-.then(r=>r.text())
-.then(t=>document.getElementById('advanced-editor-container').innerHTML=t);
-</script>
-<script src="/advanced-editor.js"></script>
 </body>
 </html>
