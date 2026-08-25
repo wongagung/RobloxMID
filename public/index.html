@@ -95,7 +95,30 @@
 
     <section class="panel library-panel">
       <div class="panel-head">
-        <div><h2>Recent tracks</h2><p>Your latest uploads and asset IDs</p></div>
+        <div><h2>
+<section class="advanced-editor-real" id="advanced-editor-real">
+ <div class="ae-head">
+  <div>
+   <h2>🎚 Advanced Sound Studio</h2>
+   <p>Edit audio sebelum upload Roblox</p>
+  </div>
+  <div id="ae-status">⏳ Menunggu audio</div>
+ </div>
+ <div class="ae-wave">♪ Audio Preview</div>
+ <div class="ae-grid">
+  <label>Gain <input id="ae-gain" type="range" min="-20" max="20" value="0"></label>
+  <label>Fade In <input id="ae-in" type="range" min="0" max="10" value="0"></label>
+  <label>Fade Out <input id="ae-out" type="range" min="0" max="10" value="0"></label>
+  <label>Speed <input id="ae-speed" type="range" min="0.5" max="2" step="0.1" value="1"></label>
+ </div>
+ <div class="ae-buttons">
+  <button>✂ Trim</button>
+  <button>🎛 EQ</button>
+  <button>🔊 Normalize</button>
+  <button id="ae-apply">Apply Edit</button>
+ </div>
+</section>
+Recent tracks</h2><p>Your latest uploads and asset IDs</p></div>
         <button id="refreshBtn" class="ghost-btn">↻ Refresh</button>
       </div>
       <div id="empty" class="empty"><span>♫</span><h3>No tracks yet</h3><p>Upload your first track to start building your library.</p></div>
@@ -105,19 +128,5 @@
 
   <div id="toast" class="toast"></div>
   <script src="/app.js"></script>
-
-<section id="advanced-editor-live" class="advanced-editor-live">
-<h2>🎚 Advanced Sound Editor</h2>
-<p>Edit sebelum upload Roblox</p>
-<div class="editor-controls">
-<label>Gain <input id="advGain" type="range" min="-20" max="20" value="0"></label>
-<label>Fade In <input id="advFadeIn" type="range" min="0" max="10" value="0"></label>
-<label>Fade Out <input id="advFadeOut" type="range" min="0" max="10" value="0"></label>
-<label>Speed <input id="advSpeed" type="range" min="0.5" max="2" step="0.1" value="1"></label>
-</div>
-<div id="robloxAssetStatus">⏳ Waiting upload...</div>
-</section>
-<script src="/advanced-live.js"></script>
-
-</body>
+<script src="/advanced-real.js"></script></body>
 </html>
