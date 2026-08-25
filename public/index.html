@@ -105,5 +105,19 @@
 
   <div id="toast" class="toast"></div>
   <script src="/app.js"></script>
+
+<section id="advanced-editor-live" class="advanced-editor-live">
+<h2>🎚 Advanced Sound Editor</h2>
+<p>Edit sebelum upload Roblox</p>
+<div class="editor-controls">
+<label>Gain <input id="advGain" type="range" min="-20" max="20" value="0"></label>
+<label>Fade In <input id="advFadeIn" type="range" min="0" max="10" value="0"></label>
+<label>Fade Out <input id="advFadeOut" type="range" min="0" max="10" value="0"></label>
+<label>Speed <input id="advSpeed" type="range" min="0.5" max="2" step="0.1" value="1"></label>
+</div>
+<div id="robloxAssetStatus">⏳ Waiting upload...</div>
+</section>
+<script src="/advanced-live.js"></script>
+
 </body>
 </html>

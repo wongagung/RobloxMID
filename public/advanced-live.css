@@ -1,0 +1,8 @@
+
+.advanced-editor-live{
+margin-top:25px;padding:22px;border-radius:20px;
+background:#151827;color:white;border:1px solid #303650;
+}
+.editor-controls{display:grid;gap:12px}
+.advanced-editor-live input{width:100%}
+#robloxAssetStatus{margin-top:15px;font-weight:bold}
