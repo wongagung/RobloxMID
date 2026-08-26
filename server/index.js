@@ -453,6 +453,33 @@ app.listen(PORT, () => {
 });
 
 // ─── URL SOURCE (yt-dlp) ────────────────────────────────────────────────────
+// ── Upload cookies.txt ──────────────────────────────────────────────────────
+const cookiesUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_, __, cb) => cb(null, root),
+    filename: (_, __, cb) => cb(null, "cookies.txt"),
+  }),
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: (_, file, cb) => {
+    if (file.originalname.endsWith(".txt") || file.mimetype === "text/plain") cb(null, true);
+    else cb(new Error("Hanya file .txt yang diterima"));
+  },
+});
+
+app.post("/api/upload-cookies", cookiesUpload.single("cookies"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "File tidak ditemukan." });
+  res.json({ ok: true, message: "cookies.txt berhasil diupload." });
+});
+
+app.get("/api/cookies-status", (_, res) => {
+  const cookiesPath = path.join(root, "cookies.txt");
+  const exists = fs.existsSync(cookiesPath);
+  const size = exists ? fs.statSync(cookiesPath).size : 0;
+  const mtime = exists ? fs.statSync(cookiesPath).mtime : null;
+  res.json({ exists, size, mtime });
+});
+// ────────────────────────────────────────────────────────────────────────────
+
 app.post("/api/fetch-url", express.json(), async (req, res) => {
   const { url } = req.body || {};
   if (!url || typeof url !== "string") {
@@ -486,18 +513,15 @@ app.post("/api/fetch-url", express.json(), async (req, res) => {
     const nodePath = process.execPath;
     const cookiesPath = path.join(root, "cookies.txt");
     const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 0;
-    // bgutil-ytdlp-pot-provider plugin auto-injects PO token via BGUTIL_HTTP_BASE_URL
-    // Run via python3 -m yt_dlp to ensure plugins from pip site-packages are loaded
     const ytFlags = [
-      "-m", "yt_dlp",
       "--js-runtimes", `node:${nodePath}`,
       "--remote-components", "ejs:github",
       "--no-playlist",
-      "--extractor-args", "youtube:player_client=web",
+      ...(hasCookies ? ["--cookies", cookiesPath] : []),
     ];
 
     // First: get metadata (title)
-    const { stdout: infoRaw } = await execFileAsync("python3",
+    const { stdout: infoRaw } = await execFileAsync("yt-dlp",
       [...ytFlags, "--dump-json", url],
       { timeout: 30000 }
     );
@@ -510,7 +534,7 @@ app.post("/api/fetch-url", express.json(), async (req, res) => {
     }
 
     // Download audio only, best quality, convert to mp3
-    await execFileAsync("python3", [
+    await execFileAsync("yt-dlp", [
       ...ytFlags,
       "-f", "bestaudio/best",
       "-x",

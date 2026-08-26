@@ -75,6 +75,18 @@
             <div id="urlStatus" class="url-status hidden">
               <span id="urlStatusText">Mendownload...</span>
             </div>
+            <!-- Cookies upload -->
+            <details class="cookies-details">
+              <summary>🍪 YouTube cookies (jika gagal karena bot detection)</summary>
+              <div class="cookies-panel">
+                <p>Export cookies dari browser pakai ekstensi <b>Get cookies.txt LOCALLY</b>, lalu upload di sini.</p>
+                <div class="url-input-row">
+                  <input type="file" id="cookiesFileInput" accept=".txt" style="flex:1;padding:8px">
+                  <button id="cookiesUploadBtn" class="ghost-btn">Upload</button>
+                </div>
+                <div id="cookiesStatus" class="url-status hidden"><span id="cookiesStatusText"></span></div>
+              </div>
+            </details>
           </div>
         </div>
 

@@ -168,6 +168,42 @@ urlInput.addEventListener("keydown", e => {
   if (e.key === "Enter") urlFetchBtn.click();
 });
 
+// ── Cookies upload ────────────────────────────────────────────────────────────
+const cookiesUploadBtn = $("#cookiesUploadBtn");
+const cookiesFileInput = $("#cookiesFileInput");
+const cookiesStatus = $("#cookiesStatus");
+const cookiesStatusText = $("#cookiesStatusText");
+
+function setCookiesStatus(msg, isError = false) {
+  cookiesStatus.classList.remove("hidden");
+  cookiesStatusText.textContent = msg;
+  cookiesStatus.className = "url-status" + (isError ? " error" : " info");
+}
+
+// Show current cookies status on load
+fetch("/api/cookies-status").then(r => r.json()).then(data => {
+  if (data.exists && data.size > 1000) {
+    const age = data.mtime ? Math.floor((Date.now() - new Date(data.mtime)) / 3600000) : "?";
+    setCookiesStatus(`✓ cookies.txt aktif (${age} jam lalu, ${Math.round(data.size/1024)}KB)`);
+  }
+}).catch(() => {});
+
+cookiesUploadBtn.onclick = async () => {
+  const file = cookiesFileInput.files[0];
+  if (!file) { setCookiesStatus("Pilih file cookies.txt dulu.", true); return; }
+  cookiesUploadBtn.disabled = true;
+  setCookiesStatus("⏳ Mengupload...");
+  const fd = new FormData();
+  fd.append("cookies", file);
+  try {
+    const r = await fetch("/api/upload-cookies", { method: "POST", body: fd });
+    const data = await r.json();
+    if (r.ok) setCookiesStatus("✓ " + data.message);
+    else setCookiesStatus("✗ " + (data.error || "Gagal upload."), true);
+  } catch { setCookiesStatus("✗ Gagal upload.", true); }
+  cookiesUploadBtn.disabled = false;
+};
+
 // Bridge used by audio-studio.js so the editor can hand back an edited
 // audio file (e.g. after Apply Edit) without duplicating upload logic.
 window.MusicLabTrack = {
