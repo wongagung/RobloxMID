@@ -91,6 +91,83 @@ $("#removeBtn").onclick = () => {
   document.dispatchEvent(new CustomEvent("musiclab:file-cleared"));
 };
 
+// ── Source tab switching ─────────────────────────────────────────────────────
+document.querySelectorAll(".source-tab").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".source-tab").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    const src = btn.dataset.source;
+    $(src === "file" ? "#sourceFile" : "#sourceUrl").classList.remove("hidden");
+    $(src === "file" ? "#sourceUrl" : "#sourceFile").classList.add("hidden");
+    if (src === "file") $("#urlInput").value = "";
+  });
+});
+
+// ── URL fetch ────────────────────────────────────────────────────────────────
+const urlInput = $("#urlInput");
+const urlFetchBtn = $("#urlFetchBtn");
+const urlStatus = $("#urlStatus");
+const urlStatusText = $("#urlStatusText");
+
+function setUrlStatus(msg, isError = false) {
+  urlStatus.classList.remove("hidden");
+  urlStatusText.textContent = msg;
+  urlStatus.className = "url-status" + (isError ? " error" : " info");
+}
+
+function clearUrlStatus() { urlStatus.classList.add("hidden"); }
+
+urlInput.addEventListener("input", () => {
+  clearUrlStatus();
+  urlFetchBtn.disabled = !urlInput.value.trim();
+});
+urlFetchBtn.disabled = true;
+
+urlFetchBtn.onclick = async () => {
+  const url = urlInput.value.trim();
+  if (!url) return;
+
+  urlFetchBtn.disabled = true;
+  setUrlStatus("⏳ Menghubungi server dan mendownload audio...");
+
+  try {
+    const resp = await fetch("/api/fetch-url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || "Gagal mendownload.");
+    }
+
+    // Extract title from response header
+    const rawTitle = resp.headers.get("X-Track-Title") || "";
+    const title = rawTitle ? decodeURIComponent(rawTitle) : "Track";
+
+    const blob = await resp.blob();
+    const file = new File([blob], `${title}.mp3`, { type: "audio/mpeg" });
+
+    setUrlStatus(`✓ Berhasil: "${title}" — memuat ke editor...`);
+    selectFile(file);
+
+    // Pre-fill asset name with title
+    $("#assetName").value = clampAssetName(title);
+    refreshUploadButton();
+
+    // Switch back to show the selected file info
+    setTimeout(clearUrlStatus, 3000);
+  } catch (err) {
+    setUrlStatus("✗ " + (err.message || "Gagal mendownload."), true);
+    urlFetchBtn.disabled = false;
+  }
+};
+
+urlInput.addEventListener("keydown", e => {
+  if (e.key === "Enter") urlFetchBtn.click();
+});
+
 // Bridge used by audio-studio.js so the editor can hand back an edited
 // audio file (e.g. after Apply Edit) without duplicating upload logic.
 window.MusicLabTrack = {
@@ -234,8 +311,10 @@ if (localStorage.theme === "light") document.body.classList.add("light");
     $("#limitLabel").textContent = `Max ${cfg.maxFileSizeMb} MB`;
     $("#robloxText").textContent = cfg.robloxConfigured ? "API key configured" : "Not configured";
     $("#telegramText").textContent = cfg.telegramConfigured ? "Bot configured" : "Not configured";
+    $("#ytdlpText").textContent = cfg.ytdlpAvailable ? "Tersedia — URL source aktif" : "Tidak tersedia — install: pip install yt-dlp";
     $("#robloxService").classList.toggle("off", !cfg.robloxConfigured);
     $("#telegramService").classList.toggle("off", !cfg.telegramConfigured);
+    $("#ytdlpService").classList.toggle("off", !cfg.ytdlpAvailable);
     $("#serverBadge").innerHTML = "<i></i> Online";
   } catch {
     $("#serverBadge").innerHTML = "<i></i> Offline";

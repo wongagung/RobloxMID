@@ -45,13 +45,37 @@
           <span id="limitLabel" class="muted">Max 20 MB</span>
         </div>
 
-        <label id="dropzone" class="dropzone">
-          <input id="fileInput" type="file" accept=".mp3,.wav,.ogg,.flac,audio/*">
-          <div class="drop-icon">♫</div>
-          <h3>Drop your music here</h3>
-          <p>or <u>browse files</u> from your computer</p>
-          <span class="format">MP3 · WAV · OGG · FLAC · M4A · AAC · OPUS · WEBM · MORE</span>
-        </label>
+        <!-- Source tabs -->
+        <div class="source-tabs" role="tablist">
+          <button class="source-tab active" data-source="file" title="Upload file">📁 File</button>
+          <button class="source-tab" data-source="url" title="Dari URL">🔗 URL</button>
+        </div>
+
+        <!-- File dropzone (default) -->
+        <div id="sourceFile">
+          <label id="dropzone" class="dropzone">
+            <input id="fileInput" type="file" accept=".mp3,.wav,.ogg,.flac,audio/*">
+            <div class="drop-icon">♫</div>
+            <h3>Drop your music here</h3>
+            <p>or <u>browse files</u> from your computer</p>
+            <span class="format">MP3 · WAV · OGG · FLAC · M4A · AAC · OPUS · WEBM · MORE</span>
+          </label>
+        </div>
+
+        <!-- URL source panel -->
+        <div id="sourceUrl" class="hidden">
+          <div class="url-panel">
+            <div class="url-icon">🔗</div>
+            <p class="url-hint">YouTube, SoundCloud, Spotify preview, Bandcamp, Vimeo, dan 1000+ situs lainnya</p>
+            <div class="url-input-row">
+              <input id="urlInput" type="url" placeholder="https://youtube.com/watch?v=... atau link lainnya" autocomplete="off" spellcheck="false">
+              <button id="urlFetchBtn" class="ghost-btn">Download</button>
+            </div>
+            <div id="urlStatus" class="url-status hidden">
+              <span id="urlStatusText">Mendownload...</span>
+            </div>
+          </div>
+        </div>
 
         <div id="selected" class="selected hidden">
           <div class="track-art">♫</div>
@@ -178,6 +202,9 @@
         </div>
         <div class="service" id="telegramService">
           <div class="service-logo tg">✈</div><div><strong>Telegram</strong><span id="telegramText">Checking...</span></div><i class="dot"></i>
+        </div>
+        <div class="service" id="ytdlpService">
+          <div class="service-logo yt">▶</div><div><strong>yt-dlp (URL source)</strong><span id="ytdlpText">Checking...</span></div><i class="dot"></i>
         </div>
         <div class="tip"><b>Storage</b><p>File di server hanya sementara. Setelah diproses, file lokal otomatis dihapus. Telegram menjadi penyimpanan salinan audio.</p></div>
       </aside>

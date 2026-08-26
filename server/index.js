@@ -119,12 +119,13 @@ function cleanupOldUploads() {
 cleanupOldUploads();
 setInterval(cleanupOldUploads, 15 * 60 * 1000).unref();
 
-app.get("/api/config", (_, res) => {
+app.get("/api/config", async (_, res) => {
   res.json({
     maxFileSizeMb: MAX_MB,
     cleanupMinutes: CLEANUP_MINUTES,
     supportedFormats: ["MP3", "WAV", "OGG", "FLAC"],
     autoConvert: true,
+    ytdlpAvailable: await execFileAsync("yt-dlp", ["--version"], { timeout: 5000 }).then(() => true).catch(() => false),
     robloxConfigured: Boolean(process.env.ROBLOX_API_KEY && process.env.ROBLOX_USER_ID),
     telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID)
   });
@@ -336,4 +337,98 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Roblox Music Uploader running on http://0.0.0.0:${PORT}`);
+});
+
+// ─── URL SOURCE (yt-dlp) ────────────────────────────────────────────────────
+app.post("/api/fetch-url", express.json(), async (req, res) => {
+  const { url } = req.body || {};
+  if (!url || typeof url !== "string") {
+    return res.status(400).json({ error: "URL tidak valid." });
+  }
+
+  // Basic sanity — must be http/https
+  let parsed;
+  try { parsed = new URL(url); } catch {
+    return res.status(400).json({ error: "URL tidak dapat diparse." });
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    return res.status(400).json({ error: "Hanya URL http/https yang didukung." });
+  }
+
+  // Check yt-dlp is available
+  try {
+    await execFileAsync("yt-dlp", ["--version"], { timeout: 5000 });
+  } catch {
+    return res.status(503).json({ error: "yt-dlp tidak tersedia di server. Install dengan: pip install yt-dlp" });
+  }
+
+  const tmpId = `${Date.now()}-${crypto.randomUUID()}`;
+  const outputTemplate = path.join(uploadsDir, `${tmpId}.%(ext)s`);
+
+  try {
+    // First: get metadata (title)
+    const { stdout: infoRaw } = await execFileAsync("yt-dlp",
+      ["--dump-json", "--no-playlist", "--flat-playlist", url],
+      { timeout: 30000 }
+    );
+    const info = JSON.parse(infoRaw.trim().split("\n")[0]);
+    const title = (info.title || info.fulltitle || "Track").slice(0, 50).trim() || "Track";
+    const duration = info.duration || 0;
+
+    if (duration > 1800) { // 30 min hard cap
+      return res.status(400).json({ error: "Audio terlalu panjang. Maksimal 30 menit." });
+    }
+
+    // Download audio only, best quality, convert to mp3
+    await execFileAsync("yt-dlp", [
+      "--no-playlist",
+      "-f", "bestaudio/best",
+      "-x",
+      "--audio-format", "mp3",
+      "--audio-quality", "192K",
+      "--max-filesize", `${MAX_MB}m`,
+      "-o", outputTemplate,
+      url
+    ], { timeout: 300000 }); // 5 min
+
+    // Find the downloaded file
+    const files = fs.readdirSync(uploadsDir)
+      .filter(f => f.startsWith(tmpId))
+      .map(f => path.join(uploadsDir, f));
+
+    if (!files.length) throw new Error("yt-dlp tidak menghasilkan file output.");
+    const downloadedPath = files[0];
+
+    const stat = fs.statSync(downloadedPath);
+    if (stat.size > MAX_MB * 1024 * 1024) {
+      safeUnlink(downloadedPath);
+      return res.status(400).json({ error: `File terlalu besar setelah download. Maksimal ${MAX_MB} MB.` });
+    }
+
+    // Stream file back to client
+    res.setHeader("Content-Type", "audio/mpeg");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(title)}.mp3"`);
+    res.setHeader("X-Track-Title", encodeURIComponent(title));
+    res.setHeader("Content-Length", stat.size);
+
+    const stream = fs.createReadStream(downloadedPath);
+    stream.pipe(res);
+    stream.on("close", () => safeUnlink(downloadedPath));
+    stream.on("error", () => { safeUnlink(downloadedPath); });
+  } catch (err) {
+    // Clean up any partial files
+    try {
+      fs.readdirSync(uploadsDir)
+        .filter(f => f.startsWith(tmpId))
+        .forEach(f => safeUnlink(path.join(uploadsDir, f)));
+    } catch {}
+
+    const msg = err.message || "";
+    if (msg.includes("max-filesize")) return res.status(400).json({ error: `File terlalu besar. Maksimal ${MAX_MB} MB.` });
+    if (msg.includes("Unsupported URL") || msg.includes("Unable to extract")) {
+      return res.status(400).json({ error: "URL tidak didukung atau tidak dapat diekstrak audio-nya." });
+    }
+    console.error("[fetch-url] Error:", msg);
+    res.status(502).json({ error: "Gagal mendownload audio. Pastikan URL valid dan dapat diakses." });
+  }
 });

@@ -9,3 +9,4 @@ COPY . .
 RUN mkdir -p uploads data
 EXPOSE 8787
 CMD ["npm","start"]
+RUN pip3 install yt-dlp
