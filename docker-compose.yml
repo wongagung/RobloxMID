@@ -14,6 +14,8 @@ services:
       - bgutil
     env_file:
       - .env
+    environment:
+      - BGUTIL_HTTP_BASE_URL=http://bgutil:4416
     ports:
       - "127.0.0.1:8788:8787"
     volumes:
