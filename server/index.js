@@ -50,7 +50,117 @@ const upload = multer({
 });
 
 app.use(express.json());
+
+// ── Simple password auth ─────────────────────────────────────────────────────
+const APP_PASSWORD = process.env.APP_PASSWORD || "";
+
+if (APP_PASSWORD) {
+  app.get("/login", (_, res) => {
+    res.send(`<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Login — Roblox Music Lab</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{min-height:100vh;display:flex;align-items:center;justify-content:center;
+         background:#0d0d12;font-family:system-ui,sans-serif;color:#e2e8f0}
+    .card{background:#16161f;border:1.5px solid #2a2a3a;border-radius:16px;
+          padding:40px 36px;width:100%;max-width:360px;display:flex;
+          flex-direction:column;gap:20px;box-shadow:0 8px 40px rgba(0,0,0,.4)}
+    .brand{font-size:22px;font-weight:800;letter-spacing:-.5px;text-align:center}
+    .brand em{color:#818cf8}
+    p{font-size:13px;color:#6b7280;text-align:center}
+    input{width:100%;padding:11px 14px;border:1.5px solid #2a2a3a;border-radius:8px;
+          background:#0d0d12;color:#e2e8f0;font-size:14px;outline:none;
+          transition:border-color .18s}
+    input:focus{border-color:#818cf8}
+    button{width:100%;padding:12px;border:none;border-radius:8px;
+           background:#6366f1;color:#fff;font-size:14px;font-weight:700;
+           cursor:pointer;transition:opacity .18s}
+    button:hover{opacity:.85}
+    .err{color:#f87171;font-size:12px;text-align:center;display:none}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="brand">♫ ROBLOX MUSIC <em>LAB</em></div>
+    <p>Masukkan password untuk mengakses</p>
+    <input type="password" id="pw" placeholder="Password" autofocus>
+    <button onclick="login()">Masuk →</button>
+    <div class="err" id="err">Password salah.</div>
+  </div>
+  <script>
+    document.getElementById('pw').addEventListener('keydown', e => { if(e.key==='Enter') login(); });
+    async function login() {
+      const pw = document.getElementById('pw').value;
+      const r = await fetch('/api/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: pw })
+      });
+      if (r.ok) { location.href = '/'; }
+      else { document.getElementById('err').style.display='block'; }
+    }
+  </script>
+</body>
+</html>`);
+  });
+
+  app.post("/api/auth", (req, res) => {
+    const { password } = req.body || {};
+    if (!password || !crypto.timingSafeEqual(
+      Buffer.from(password),
+      Buffer.from(APP_PASSWORD)
+    )) {
+      return res.status(401).json({ error: "Password salah." });
+    }
+    const ts = Date.now().toString();
+    const sig = crypto.createHmac("sha256", APP_PASSWORD).update(ts).digest("hex");
+    const token = `${ts}.${sig}`;
+    res.cookie("_auth", token, {
+      httpOnly: true,
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+    res.json({ ok: true });
+  });
+
+  app.post("/api/logout", (_, res) => {
+    res.clearCookie("_auth");
+    res.json({ ok: true });
+  });
+
+  function parseAuthCookie(cookieHeader) {
+    if (!cookieHeader) return false;
+    const match = cookieHeader.match(/(?:^|;\s*)_auth=([^;]+)/);
+    if (!match) return false;
+    const token = decodeURIComponent(match[1]);
+    const dot = token.lastIndexOf(".");
+    if (dot < 0) return false;
+    const ts = token.slice(0, dot);
+    const sig = token.slice(dot + 1);
+    const expected = crypto.createHmac("sha256", APP_PASSWORD).update(ts).digest("hex");
+    try {
+      return sig.length === expected.length &&
+        crypto.timingSafeEqual(Buffer.from(sig, "hex"), Buffer.from(expected, "hex"));
+    } catch { return false; }
+  }
+
+  app.use((req, res, next) => {
+    if (req.path === "/login" || req.path === "/api/auth") return next();
+    if (parseAuthCookie(req.headers.cookie)) return next();
+    if (req.path.startsWith("/api/")) {
+      return res.status(401).json({ error: "Unauthorized. Login diperlukan." });
+    }
+    res.redirect("/login");
+  });
+}
+// ────────────────────────────────────────────────────────────────────────────
+
 app.use(express.static(path.join(root, "public")));
+
 
 function clampAssetName(name) {
   let n = String(name || "").trim();
@@ -366,9 +476,20 @@ app.post("/api/fetch-url", express.json(), async (req, res) => {
   const outputTemplate = path.join(uploadsDir, `${tmpId}.%(ext)s`);
 
   try {
+    // Base yt-dlp flags — tell it Node.js is available as JS runtime,
+    // and use cookies-from-browser fallback via po_token workaround.
+    // --extractor-args bypasses bot detection on YouTube without needing
+    // a real browser cookie export.
+    const nodePath = process.execPath; // e.g. /usr/local/bin/node
+    const ytFlags = [
+      "--js-runtimes", `nodejs:${nodePath}`,
+      "--extractor-args", "youtube:player_client=web,mweb",
+      "--no-playlist",
+    ];
+
     // First: get metadata (title)
     const { stdout: infoRaw } = await execFileAsync("yt-dlp",
-      ["--dump-json", "--no-playlist", "--flat-playlist", url],
+      [...ytFlags, "--dump-json", url],
       { timeout: 30000 }
     );
     const info = JSON.parse(infoRaw.trim().split("\n")[0]);
@@ -381,7 +502,7 @@ app.post("/api/fetch-url", express.json(), async (req, res) => {
 
     // Download audio only, best quality, convert to mp3
     await execFileAsync("yt-dlp", [
-      "--no-playlist",
+      ...ytFlags,
       "-f", "bestaudio/best",
       "-x",
       "--audio-format", "mp3",

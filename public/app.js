@@ -291,6 +291,15 @@ $("#themeBtn").onclick = () => {
 };
 if (localStorage.theme === "light") document.body.classList.add("light");
 
+// Show logout button only when auth cookie is present
+if (document.cookie.includes("_auth")) {
+  $("#logoutBtn").classList.remove("hidden");
+}
+$("#logoutBtn").onclick = async () => {
+  await fetch("/api/logout", { method: "POST" });
+  location.href = "/login";
+};
+
 (async function init(){
   const clockFmt = new Intl.DateTimeFormat("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   function updateClock(){
