@@ -487,7 +487,9 @@ app.post("/api/fetch-url", express.json(), async (req, res) => {
     const cookiesPath = path.join(root, "cookies.txt");
     const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 0;
     // bgutil-ytdlp-pot-provider plugin auto-injects PO token via BGUTIL_HTTP_BASE_URL
+    // Run via python3 -m yt_dlp to ensure plugins from pip site-packages are loaded
     const ytFlags = [
+      "-m", "yt_dlp",
       "--js-runtimes", `node:${nodePath}`,
       "--remote-components", "ejs:github",
       "--no-playlist",
@@ -495,7 +497,7 @@ app.post("/api/fetch-url", express.json(), async (req, res) => {
     ];
 
     // First: get metadata (title)
-    const { stdout: infoRaw } = await execFileAsync("yt-dlp",
+    const { stdout: infoRaw } = await execFileAsync("python3",
       [...ytFlags, "--dump-json", url],
       { timeout: 30000 }
     );
@@ -508,7 +510,7 @@ app.post("/api/fetch-url", express.json(), async (req, res) => {
     }
 
     // Download audio only, best quality, convert to mp3
-    await execFileAsync("yt-dlp", [
+    await execFileAsync("python3", [
       ...ytFlags,
       "-f", "bestaudio/best",
       "-x",
