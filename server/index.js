@@ -485,6 +485,7 @@ app.post("/api/fetch-url", express.json(), async (req, res) => {
     const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 0;
     const ytFlags = [
       "--js-runtimes", `node:${nodePath}`,
+      "--remote-components", "ejs:github",
       "--no-playlist",
       ...(hasCookies ? ["--cookies", cookiesPath] : []),
     ];
