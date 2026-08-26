@@ -1,84 +1,206 @@
-/* Advanced Sound Studio — real Web Audio powered editor + spectrum analyzer.
- * Wired to the #advancedEditor card in index.html. Requires app.js to be
- * loaded first (uses window.MusicLabTrack + the global `toast` helper).
+/* Advanced Sound Studio — custom buffer-based audio editor.
+ * Trim, Volume, Speed, Pitch (detune) and a 10-band EQ, all applied live
+ * during preview and baked in for real when the user hits Save.
+ * Requires app.js to be loaded first (uses window.MusicLabTrack + toast()).
  */
 (function () {
   const card = document.getElementById("advancedEditor");
-  const audioEl = document.getElementById("audio");
-  if (!card || !audioEl) return;
+  if (!card) return;
 
   const statusEl = document.getElementById("editorStatus");
-  const gainEl = document.getElementById("editorGain");
-  const fadeInEl = document.getElementById("editorFadeIn");
-  const fadeOutEl = document.getElementById("editorFadeOut");
-  const speedEl = document.getElementById("editorSpeed");
-  const gainVal = document.getElementById("editorGainVal");
-  const fadeInVal = document.getElementById("editorFadeInVal");
-  const fadeOutVal = document.getElementById("editorFadeOutVal");
-  const speedVal = document.getElementById("editorSpeedVal");
-  const previewBtn = document.getElementById("editorPreview");
-  const applyBtn = document.getElementById("editorApply");
-  const resetBtn = document.getElementById("editorReset");
+  const trackNameEl = document.getElementById("editorTrackName");
+  const waveWrap = document.getElementById("waveWrap");
   const waveCanvas = document.getElementById("editorWave");
   const specCanvas = document.getElementById("editorSpectrum");
+  const watermarkEl = document.getElementById("waveWatermark");
+  const playheadEl = document.getElementById("playhead");
+  const dimLeft = document.getElementById("trimDimLeft");
+  const dimRight = document.getElementById("trimDimRight");
+  const handleLeft = document.getElementById("trimHandleLeft");
+  const handleRight = document.getElementById("trimHandleRight");
+  const waveTimeStart = document.getElementById("waveTimeStart");
+  const waveTimeCursor = document.getElementById("waveTimeCursor");
+  const waveTimeEnd = document.getElementById("waveTimeEnd");
 
-  const controls = [gainEl, fadeInEl, fadeOutEl, speedEl];
-  const pairs = [
-    { range: gainEl, val: gainVal },
-    { range: fadeInEl, val: fadeInVal },
-    { range: fadeOutEl, val: fadeOutVal },
-    { range: speedEl, val: speedVal }
-  ];
-  const valueInputs = pairs.map(p => p.val);
+  const gainEl = document.getElementById("editorGain");
+  const gainVal = document.getElementById("editorGainVal");
+  const speedEl = document.getElementById("editorSpeed");
+  const speedVal = document.getElementById("editorSpeedVal");
+  const pitchEl = document.getElementById("editorPitch");
+  const pitchVal = document.getElementById("editorPitchVal");
 
+  const fadeInChk = document.getElementById("fadeInChk");
+  const fadeOutChk = document.getElementById("fadeOutChk");
+  const fadeInVal = document.getElementById("editorFadeInVal");
+  const fadeOutVal = document.getElementById("editorFadeOutVal");
+
+  const playBtn = document.getElementById("editorPlay");
+  const trimRangeLabel = document.getElementById("trimRangeLabel");
+  const applyBtn = document.getElementById("editorApply");
+  const resetBtn = document.getElementById("editorReset");
+
+  const eqPresetsEl = document.getElementById("eqPresets");
+  const eqBandsEl = document.getElementById("eqBands");
+
+  const EQ_FREQS = [60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000];
+  const EQ_PRESETS = {
+    "Default":            [0,0,0,0,0,0,0,0,0,0],
+    "Classic":            [2,1.5,1,0,-1,-1,0,1,1.5,2],
+    "Dance":              [5,4,1,0,-2,-2,0,2,3,3],
+    "Club":               [-1,0,2,3,3,3,2,0,0,-1],
+    "Full bass":          [6,6,5,3,1,0,-1,-2,-2,-2],
+    "Full bass & treble": [5,4,0,-2,-3,-2,0,3,4,5],
+    "Full treble":        [-3,-3,-2,-1,0,2,4,5,6,6]
+  };
+
+  let allEnabled = [gainEl, gainVal, speedEl, speedVal, pitchEl, pitchVal,
+    fadeInChk, fadeOutChk, fadeInVal, fadeOutVal, playBtn, applyBtn, resetBtn];
+
+  // ---- Web Audio graph ----
   let audioCtx = null;
   let analyser = null;
   let gainNode = null;
-  let sourceNode = null;
+  let eqFilters = [];
+  let eqGains = EQ_FREQS.map(() => 0);
+  let activePreset = "Default";
+
+  // ---- Track state ----
   let originalFile = null;
   let originalBuffer = null;
-  let isPreviewing = false;
+  let duration = 0;
+  let trimStart = 0;
+  let trimEnd = 0;
+  let cursorPos = 0;
+
+  // ---- Playback state ----
+  let playSource = null;
+  let isPlaying = false;
+  let playStartCtxTime = 0;
+  let playStartOffset = 0;
+  let rafPlayId = null;
+  let rafSpecId = null;
   let fadeOutTimer = null;
-  let rafId = null;
 
   const say = (msg, type) => { if (typeof toast === "function") toast(msg, type); };
   const dbToGain = db => Math.pow(10, db / 20);
+  const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
-  function setControlsEnabled(enabled) {
-    controls.forEach(el => (el.disabled = !enabled));
-    valueInputs.forEach(el => (el.disabled = !enabled));
-    previewBtn.disabled = !enabled;
-    applyBtn.disabled = !enabled;
-    resetBtn.disabled = !enabled;
+  function fmtTime(s) {
+    if (!isFinite(s) || s < 0) s = 0;
+    const m = Math.floor(s / 60);
+    const sec = (s - m * 60).toFixed(1);
+    return `${String(m).padStart(2, "0")}:${sec.padStart(4, "0")}`;
   }
 
-  function updateBubbles() {
-    pairs.forEach(p => { p.val.value = parseFloat(p.range.value).toFixed(2); });
+  function setEnabled(enabled) {
+    allEnabled.forEach(el => { if (el) el.disabled = !enabled; });
+    eqBandsEl.querySelectorAll("input").forEach(el => (el.disabled = !enabled));
+    eqPresetsEl.querySelectorAll("button").forEach(el => (el.disabled = !enabled));
   }
-  updateBubbles();
 
+  // ---------- Tabs ----------
+  document.querySelectorAll(".tab-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      const tab = btn.dataset.tab;
+      document.querySelectorAll(".tab-panel").forEach(p => p.classList.toggle("hidden", p.dataset.panel !== tab));
+    });
+  });
+
+  // ---------- EQ UI ----------
+  function buildEqUI() {
+    eqPresetsEl.innerHTML = Object.keys(EQ_PRESETS).map(name =>
+      `<button type="button" class="eq-preset-btn${name === "Default" ? " active" : ""}" data-preset="${name}" disabled>${name}</button>`
+    ).join("") + `<button type="button" class="eq-preset-btn" data-preset="Custom" disabled>Custom</button>`;
+
+    eqBandsEl.innerHTML = EQ_FREQS.map((f, i) => `
+      <div class="eq-band">
+        <span class="eq-band-val" id="eqVal${i}">0.0</span>
+        <div class="eq-slider-wrap">
+          <input type="range" class="eq-slider" id="eqSlider${i}" min="-12" max="12" step="0.1" value="0" disabled>
+        </div>
+        <span class="eq-band-freq">${f >= 1000 ? (f / 1000) + "k" : f}</span>
+      </div>
+    `).join("");
+
+    allEnabled.push(...eqBandsEl.querySelectorAll("input"));
+
+    EQ_FREQS.forEach((f, i) => {
+      const slider = document.getElementById(`eqSlider${i}`);
+      const label = document.getElementById(`eqVal${i}`);
+      slider.addEventListener("input", () => {
+        const v = parseFloat(slider.value);
+        eqGains[i] = v;
+        label.textContent = v.toFixed(1);
+        markCustomPreset();
+        if (isPlaying && eqFilters[i]) eqFilters[i].gain.setTargetAtTime(v, audioCtx.currentTime, 0.05);
+      });
+    });
+
+    eqPresetsEl.querySelectorAll(".eq-preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const name = btn.dataset.preset;
+        if (name === "Custom") return;
+        applyEqPreset(name);
+      });
+    });
+  }
+
+  function applyEqPreset(name) {
+    const values = EQ_PRESETS[name];
+    activePreset = name;
+    values.forEach((v, i) => {
+      eqGains[i] = v;
+      const slider = document.getElementById(`eqSlider${i}`);
+      const label = document.getElementById(`eqVal${i}`);
+      slider.value = v;
+      label.textContent = v.toFixed(1);
+      if (isPlaying && eqFilters[i]) eqFilters[i].gain.setTargetAtTime(v, audioCtx.currentTime, 0.05);
+    });
+    eqPresetsEl.querySelectorAll(".eq-preset-btn").forEach(b => b.classList.toggle("active", b.dataset.preset === name));
+  }
+
+  function markCustomPreset() {
+    if (activePreset === "Custom") return;
+    activePreset = "Custom";
+    eqPresetsEl.querySelectorAll(".eq-preset-btn").forEach(b => b.classList.toggle("active", b.dataset.preset === "Custom"));
+  }
+
+  buildEqUI();
+
+  // ---------- Web Audio graph setup ----------
   function ensureContext() {
     if (!audioCtx) {
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      sourceNode = audioCtx.createMediaElementSource(audioEl);
       gainNode = audioCtx.createGain();
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 128;
       analyser.smoothingTimeConstant = 0.75;
-      sourceNode.connect(gainNode);
-      gainNode.connect(analyser);
+
+      let node = gainNode;
+      eqFilters = EQ_FREQS.map((f, i) => {
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = "peaking";
+        filter.frequency.value = f;
+        filter.Q.value = 1.1;
+        filter.gain.value = eqGains[i];
+        node.connect(filter);
+        node = filter;
+        return filter;
+      });
+      node.connect(analyser);
       analyser.connect(audioCtx.destination);
     }
     if (audioCtx.state === "suspended") audioCtx.resume();
   }
 
-  // ---------- Waveform (static preview of the loaded track) ----------
+  // ---------- Canvas sizing ----------
   function sizeCanvas(canvas) {
     const dpr = window.devicePixelRatio || 1;
     const rect = canvas.getBoundingClientRect();
     canvas.width = Math.max(1, Math.round(rect.width * dpr));
     canvas.height = Math.max(1, Math.round(rect.height * dpr));
-    return dpr;
   }
 
   function drawWaveform(buffer) {
@@ -89,10 +211,6 @@
     const data = buffer.getChannelData(0);
     const step = Math.max(1, Math.floor(data.length / w));
     const mid = h / 2;
-    const grad = ctx.createLinearGradient(0, 0, w, 0);
-    grad.addColorStop(0, "#8b5cf6");
-    grad.addColorStop(1, "#22d3ee");
-    ctx.fillStyle = grad;
     for (let x = 0; x < w; x++) {
       let min = 1, max = -1;
       const start = x * step;
@@ -100,206 +218,261 @@
         const v = data[start + j];
         if (v !== undefined) { if (v < min) min = v; if (v > max) max = v; }
       }
-      const y1 = mid + min * mid;
-      const y2 = mid + max * mid;
-      ctx.fillRect(x, Math.min(y1, y2), 1, Math.max(1, Math.abs(y2 - y1)));
+      const y1 = mid + min * mid * 0.92;
+      const y2 = mid + max * mid * 0.92;
+      const barH = Math.max(1, y2 - y1);
+      const grad = ctx.createLinearGradient(0, y1, 0, y2);
+      grad.addColorStop(0, "#5eead4");
+      grad.addColorStop(0.5, "#22d3ee");
+      grad.addColorStop(1, "#5eead4");
+      ctx.fillStyle = grad;
+      ctx.fillRect(x, y1, 1, barH);
     }
   }
 
-  // ---------- Live spectrum bars ----------
   function drawSpectrum() {
-    rafId = requestAnimationFrame(drawSpectrum);
+    rafSpecId = requestAnimationFrame(drawSpectrum);
     const ctx = specCanvas.getContext("2d");
     const w = specCanvas.width, h = specCanvas.height;
     ctx.clearRect(0, 0, w, h);
-
-    const barCount = 40;
-    const barGap = w / barCount * 0.25;
+    const barCount = 56;
+    const barGap = w / barCount * 0.22;
     const barWidth = w / barCount - barGap;
 
     let data;
-    if (analyser && isPreviewing) {
+    if (analyser && isPlaying) {
       data = new Uint8Array(analyser.frequencyBinCount);
       analyser.getByteFrequencyData(data);
     }
-
     for (let i = 0; i < barCount; i++) {
-      let v = 0.03; // idle floor so the bars are always visible, not blank
-      if (data) {
-        const idx = Math.floor((i / barCount) * data.length);
-        v = Math.max(0.03, data[idx] / 255);
-      }
+      let v = 0.04;
+      if (data) v = Math.max(0.04, data[Math.floor((i / barCount) * data.length)] / 255);
       const barH = v * h;
       const x = i * (barWidth + barGap);
       const grad = ctx.createLinearGradient(0, h, 0, h - barH);
       grad.addColorStop(0, "#8b5cf6");
-      grad.addColorStop(1, "#22d3ee");
+      grad.addColorStop(1, "#5eead4");
       ctx.fillStyle = grad;
-      const r = Math.min(3, barWidth / 2);
-      roundRect(ctx, x, h - barH, barWidth, barH, r);
-      ctx.fill();
+      ctx.fillRect(x, h - barH, barWidth, barH);
     }
   }
 
-  function roundRect(ctx, x, y, w, h, r) {
-    if (h <= 0 || w <= 0) return;
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-  }
-
   sizeCanvas(specCanvas);
-  rafId = requestAnimationFrame(drawSpectrum);
+  rafSpecId = requestAnimationFrame(drawSpectrum);
   window.addEventListener("resize", () => {
     sizeCanvas(specCanvas);
-    if (originalBuffer) drawWaveform(originalBuffer);
+    if (originalBuffer) { drawWaveform(originalBuffer); layoutTrimHandles(); }
   });
 
-  // ---------- Loading a track for editing ----------
+  // ---------- Trim handles ----------
+  function layoutTrimHandles() {
+    if (!duration) return;
+    const leftPct = (trimStart / duration) * 100;
+    const rightPct = (trimEnd / duration) * 100;
+    handleLeft.style.left = `${leftPct}%`;
+    handleRight.style.left = `${rightPct}%`;
+    dimLeft.style.width = `${leftPct}%`;
+    dimRight.style.width = `${100 - rightPct}%`;
+    waveTimeStart.textContent = fmtTime(trimStart);
+    waveTimeEnd.textContent = fmtTime(duration);
+    trimRangeLabel.textContent = `${fmtTime(trimStart)} — ${fmtTime(trimEnd)}`;
+  }
+
+  function dragHandle(handleEl, isLeft) {
+    handleEl.addEventListener("pointerdown", e => {
+      if (handleEl.disabled || !duration) return;
+      e.preventDefault();
+      stopPlayback();
+      const rectBox = waveWrap.getBoundingClientRect();
+      const move = ev => {
+        const frac = clamp((ev.clientX - rectBox.left) / rectBox.width, 0, 1);
+        const t = frac * duration;
+        if (isLeft) trimStart = clamp(t, 0, trimEnd - 0.2);
+        else trimEnd = clamp(t, trimStart + 0.2, duration);
+        cursorPos = trimStart;
+        layoutTrimHandles();
+        drawPlayhead(cursorPos);
+      };
+      const up = () => {
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      };
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  }
+  dragHandle(handleLeft, true);
+  dragHandle(handleRight, false);
+
+  function drawPlayhead(pos) {
+    if (!duration) return;
+    const pct = (pos / duration) * 100;
+    playheadEl.style.left = `${pct}%`;
+    playheadEl.classList.toggle("show", isPlaying);
+    waveTimeCursor.textContent = fmtTime(pos);
+  }
+
+  // ---------- Loading a track ----------
   async function loadFile(file) {
     originalFile = file;
     originalBuffer = null;
-    setControlsEnabled(false);
+    setEnabled(false);
     statusEl.textContent = "⏳ Decoding audio...";
+    trackNameEl.textContent = `🎚 ${file.name}`;
+    watermarkEl.textContent = file.name;
     try {
       const arrayBuffer = await file.arrayBuffer();
       const tmpCtx = new (window.AudioContext || window.webkitAudioContext)();
       originalBuffer = await tmpCtx.decodeAudioData(arrayBuffer.slice(0));
       tmpCtx.close();
+      duration = originalBuffer.duration;
+      trimStart = 0; trimEnd = duration; cursorPos = 0;
       drawWaveform(originalBuffer);
+      layoutTrimHandles();
+      drawPlayhead(0);
       statusEl.textContent = "🎵 Audio loaded - editor ready";
-      setControlsEnabled(true);
+      setEnabled(true);
     } catch (err) {
       console.error("Audio decode failed:", err);
       statusEl.textContent = "⚠ Format tidak bisa diedit di browser";
-      setControlsEnabled(false);
+      setEnabled(false);
     }
   }
 
   document.addEventListener("musiclab:file-selected", e => loadFile(e.detail.file));
   document.addEventListener("musiclab:file-cleared", () => {
-    originalFile = null;
-    originalBuffer = null;
-    stopPreview();
-    setControlsEnabled(false);
+    originalFile = null; originalBuffer = null; duration = 0;
+    stopPlayback();
+    setEnabled(false);
     statusEl.textContent = "Waiting audio...";
-    const wctx = waveCanvas.getContext("2d");
-    wctx.clearRect(0, 0, waveCanvas.width, waveCanvas.height);
+    trackNameEl.textContent = "🎚 Advanced Sound Studio";
+    watermarkEl.textContent = "";
+    waveCanvas.getContext("2d").clearRect(0, 0, waveCanvas.width, waveCanvas.height);
   });
 
-  // ---------- Live preview (plays the actual <audio> element through the graph) ----------
-  function clearFadeOutTimer() {
-    if (fadeOutTimer) { clearInterval(fadeOutTimer); fadeOutTimer = null; }
-  }
-
-  function armFades() {
-    const fadeIn = parseFloat(fadeInEl.value) || 0;
-    const fadeOut = parseFloat(fadeOutEl.value) || 0;
-    const base = dbToGain(parseFloat(gainEl.value) || 0);
-    const now = audioCtx.currentTime;
-    gainNode.gain.cancelScheduledValues(now);
-    if (fadeIn > 0) {
-      gainNode.gain.setValueAtTime(0.0001, now);
-      gainNode.gain.linearRampToValueAtTime(base, now + fadeIn);
-    } else {
-      gainNode.gain.setValueAtTime(base, now);
-    }
-    clearFadeOutTimer();
-    if (fadeOut > 0) {
-      fadeOutTimer = setInterval(() => {
-        if (!audioEl.duration || audioEl.paused) return;
-        const rate = audioEl.playbackRate || 1;
-        const remaining = (audioEl.duration - audioEl.currentTime) / rate;
-        if (remaining <= fadeOut) {
-          const t = audioCtx.currentTime;
-          gainNode.gain.cancelScheduledValues(t);
-          gainNode.gain.setValueAtTime(gainNode.gain.value, t);
-          gainNode.gain.linearRampToValueAtTime(0.0001, t + Math.max(0.02, remaining));
-          clearFadeOutTimer();
-        }
-      }, 100);
-    }
-  }
-
-  function applyLiveGain() {
-    if (!audioCtx || !gainNode) return;
-    // Only nudge gain live when we're not mid fade-in/out ramp for the base level.
-    const base = dbToGain(parseFloat(gainEl.value) || 0);
-    gainNode.gain.setTargetAtTime(base, audioCtx.currentTime, 0.05);
-  }
-
-  controls.forEach(el => el.addEventListener("input", () => {
-    updateBubbles();
-    if (isPreviewing) {
-      if (el === speedEl) audioEl.playbackRate = parseFloat(speedEl.value) || 1;
-      else applyLiveGain();
-    }
-  }));
-
-  // Let the number box next to each slider be typed into directly.
-  pairs.forEach(({ range, val }) => {
+  // ---------- Value bindings ----------
+  function bindPair(range, val, onChange) {
     const commit = () => {
       const min = parseFloat(range.min), max = parseFloat(range.max);
       let v = parseFloat(val.value);
       if (Number.isNaN(v)) v = parseFloat(range.value);
-      v = Math.min(max, Math.max(min, v));
-      range.value = v;
-      val.value = v.toFixed(2);
-      if (isPreviewing) {
-        if (range === speedEl) audioEl.playbackRate = parseFloat(speedEl.value) || 1;
-        else applyLiveGain();
-      }
+      v = clamp(v, min, max);
+      range.value = v; val.value = v.toFixed(2);
+      onChange(v);
     };
+    range.addEventListener("input", () => { val.value = parseFloat(range.value).toFixed(2); onChange(parseFloat(range.value)); });
     val.addEventListener("change", commit);
     val.addEventListener("keydown", e => { if (e.key === "Enter") val.blur(); });
-  });
+  }
 
-  function startPreview() {
-    if (!originalFile) { say("Pilih file audio dulu.", "error"); return; }
+  bindPair(gainEl, gainVal, v => { if (isPlaying) gainNode.gain.setTargetAtTime(dbToGain(v), audioCtx.currentTime, 0.05); });
+  bindPair(speedEl, speedVal, v => { if (isPlaying && playSource) playSource.playbackRate.value = v; });
+  bindPair(pitchEl, pitchVal, v => { if (isPlaying && playSource && playSource.detune) playSource.detune.setTargetAtTime(v * 100, audioCtx.currentTime, 0.02); });
+
+  // ---------- Playback engine ----------
+  function stopPlayback() {
+    if (playSource) {
+      try { playSource.onended = null; playSource.stop(); } catch (e) {}
+      try { playSource.disconnect(); } catch (e) {}
+      playSource = null;
+    }
+    if (fadeOutTimer) { clearTimeout(fadeOutTimer); fadeOutTimer = null; }
+    cancelAnimationFrame(rafPlayId);
+    isPlaying = false;
+    playheadEl.classList.remove("show");
+    playBtn.textContent = "▶";
+  }
+
+  function tickPlayhead() {
+    if (!isPlaying) return;
+    const speed = parseFloat(speedEl.value) || 1;
+    const pos = playStartOffset + (audioCtx.currentTime - playStartCtxTime) * speed;
+    if (pos >= trimEnd) {
+      cursorPos = trimStart;
+      stopPlayback();
+      drawPlayhead(cursorPos);
+      return;
+    }
+    drawPlayhead(pos);
+    rafPlayId = requestAnimationFrame(tickPlayhead);
+  }
+
+  function startPlayback(fromPos) {
+    if (!originalBuffer) { say("Pilih file audio dulu.", "error"); return; }
     ensureContext();
-    audioEl.playbackRate = parseFloat(speedEl.value) || 1;
-    armFades();
-    audioEl.currentTime = 0;
-    audioEl.play();
+    stopPlayback();
+
+    const speed = parseFloat(speedEl.value) || 1;
+    const offset = clamp(fromPos, trimStart, trimEnd - 0.05);
+    const bufDur = trimEnd - offset;
+    const realDur = bufDur / speed;
+
+    playSource = audioCtx.createBufferSource();
+    playSource.buffer = originalBuffer;
+    playSource.playbackRate.value = speed;
+    if (playSource.detune) playSource.detune.value = (parseFloat(pitchEl.value) || 0) * 100;
+    playSource.connect(gainNode);
+
+    const now = audioCtx.currentTime;
+    const base = dbToGain(parseFloat(gainEl.value) || 0);
+    gainNode.gain.cancelScheduledValues(now);
+    const doFadeIn = fadeInChk.checked && offset <= trimStart + 0.05;
+    const fadeInSec = parseFloat(fadeInVal.value) || 0;
+    if (doFadeIn && fadeInSec > 0) {
+      gainNode.gain.setValueAtTime(0.0001, now);
+      gainNode.gain.linearRampToValueAtTime(base, now + Math.min(fadeInSec, realDur));
+    } else {
+      gainNode.gain.setValueAtTime(base, now);
+    }
+    if (fadeOutTimer) clearTimeout(fadeOutTimer);
+    const fadeOutSec = parseFloat(fadeOutVal.value) || 0;
+    if (fadeOutChk.checked && fadeOutSec > 0) {
+      const delayMs = Math.max(0, (realDur - fadeOutSec)) * 1000;
+      fadeOutTimer = setTimeout(() => {
+        const t = audioCtx.currentTime;
+        gainNode.gain.cancelScheduledValues(t);
+        gainNode.gain.setValueAtTime(gainNode.gain.value, t);
+        gainNode.gain.linearRampToValueAtTime(0.0001, t + Math.min(fadeOutSec, realDur));
+      }, delayMs);
+    }
+
+    playSource.start(0, offset, bufDur);
+    playStartCtxTime = now;
+    playStartOffset = offset;
+    isPlaying = true;
+    playBtn.textContent = "⏸";
+    playSource.onended = () => {
+      if (isPlaying) { cursorPos = trimStart; stopPlayback(); drawPlayhead(cursorPos); }
+    };
+    tickPlayhead();
   }
 
-  function stopPreview() {
-    clearFadeOutTimer();
-    if (!audioEl.paused) audioEl.pause();
-  }
-
-  previewBtn.addEventListener("click", () => {
-    if (isPreviewing) stopPreview();
-    else startPreview();
+  playBtn.addEventListener("click", () => {
+    if (isPlaying) {
+      const speed = parseFloat(speedEl.value) || 1;
+      cursorPos = clamp(playStartOffset + (audioCtx.currentTime - playStartCtxTime) * speed, trimStart, trimEnd);
+      stopPlayback();
+      drawPlayhead(cursorPos);
+    } else {
+      startPlayback(cursorPos < trimStart || cursorPos >= trimEnd ? trimStart : cursorPos);
+    }
   });
 
-  audioEl.addEventListener("play", () => {
-    isPreviewing = true;
-    previewBtn.textContent = "⏸ Stop Preview";
-  });
-  audioEl.addEventListener("pause", () => {
-    isPreviewing = false;
-    previewBtn.textContent = "▶ Preview";
-    clearFadeOutTimer();
-  });
-  audioEl.addEventListener("ended", () => {
-    isPreviewing = false;
-    previewBtn.textContent = "▶ Preview";
-    clearFadeOutTimer();
+  // Clicking the waveform seeks (and keeps trim range as-is).
+  waveWrap.addEventListener("pointerdown", e => {
+    if (!duration || e.target === handleLeft || e.target === handleRight) return;
+    const rectBox = waveWrap.getBoundingClientRect();
+    const frac = clamp((e.clientX - rectBox.left) / rectBox.width, 0, 1);
+    cursorPos = clamp(frac * duration, trimStart, trimEnd);
+    drawPlayhead(cursorPos);
+    if (isPlaying) startPlayback(cursorPos);
   });
 
-  // ---------- Apply edit: render offline and bake a new file for upload ----------
-  // Exported as MP3 (compressed) so long tracks don't blow past the server's
-  // upload size limit the way an uncompressed WAV would. Falls back to WAV
-  // only if the MP3 encoder library failed to load (e.g. offline/blocked CDN).
+  // ---------- Save (bake edits into a new file for upload) ----------
   function floatTo16BitPCM(float32Array) {
     const out = new Int16Array(float32Array.length);
     for (let i = 0; i < float32Array.length; i++) {
-      const s = Math.max(-1, Math.min(1, float32Array[i]));
+      const s = clamp(float32Array[i], -1, 1);
       out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
     }
     return out;
@@ -327,9 +500,7 @@
   }
 
   function bufferToWav(buffer) {
-    const numCh = buffer.numberOfChannels;
-    const sampleRate = buffer.sampleRate;
-    const frames = buffer.length;
+    const numCh = buffer.numberOfChannels, sampleRate = buffer.sampleRate, frames = buffer.length;
     const dataSize = frames * numCh * 2;
     const out = new ArrayBuffer(44 + dataSize);
     const view = new DataView(out);
@@ -345,79 +516,93 @@
     for (let c = 0; c < numCh; c++) channels.push(buffer.getChannelData(c));
     for (let i = 0; i < frames; i++) {
       for (let c = 0; c < numCh; c++) {
-        let s = Math.max(-1, Math.min(1, channels[c][i]));
+        let s = clamp(channels[c][i], -1, 1);
         s = s < 0 ? s * 0x8000 : s * 0x7fff;
-        view.setInt16(offset, s, true);
-        offset += 2;
+        view.setInt16(offset, s, true); offset += 2;
       }
     }
     return new Blob([out], { type: "audio/wav" });
   }
 
-  async function renderEdited(buffer, opts) {
-    const speed = Math.max(0.5, Math.min(2, opts.speed));
-    const outLength = Math.max(1, Math.round(buffer.length / speed));
-    const offlineCtx = new OfflineAudioContext(buffer.numberOfChannels, outLength, buffer.sampleRate);
+  async function renderEdited() {
+    const speed = clamp(parseFloat(speedEl.value) || 1, 0.5, 2);
+    const trimmedLen = Math.max(1, Math.round((trimEnd - trimStart) * originalBuffer.sampleRate));
+    const outLength = Math.max(1, Math.round(trimmedLen / speed));
+    const offlineCtx = new OfflineAudioContext(originalBuffer.numberOfChannels, outLength, originalBuffer.sampleRate);
+
     const src = offlineCtx.createBufferSource();
-    src.buffer = buffer;
+    src.buffer = originalBuffer;
     src.playbackRate.value = speed;
+    if (src.detune) src.detune.value = (parseFloat(pitchEl.value) || 0) * 100;
+
     const gain = offlineCtx.createGain();
-    const duration = outLength / buffer.sampleRate;
-    const base = dbToGain(opts.gainDb);
-    if (opts.fadeIn > 0) {
+    const duration_ = outLength / originalBuffer.sampleRate;
+    const base = dbToGain(parseFloat(gainEl.value) || 0);
+    const fadeIn = fadeInChk.checked ? (parseFloat(fadeInVal.value) || 0) : 0;
+    const fadeOut = fadeOutChk.checked ? (parseFloat(fadeOutVal.value) || 0) : 0;
+    if (fadeIn > 0) {
       gain.gain.setValueAtTime(0.0001, 0);
-      gain.gain.linearRampToValueAtTime(base, Math.min(opts.fadeIn, duration));
+      gain.gain.linearRampToValueAtTime(base, Math.min(fadeIn, duration_));
     } else {
       gain.gain.setValueAtTime(base, 0);
     }
-    if (opts.fadeOut > 0) {
-      const start = Math.max(0, duration - opts.fadeOut);
+    if (fadeOut > 0) {
+      const start = Math.max(0, duration_ - fadeOut);
       gain.gain.setValueAtTime(base, start);
-      gain.gain.linearRampToValueAtTime(0.0001, duration);
+      gain.gain.linearRampToValueAtTime(0.0001, duration_);
     }
+
+    let node = gain;
+    const filters = EQ_FREQS.map((f, i) => {
+      const filter = offlineCtx.createBiquadFilter();
+      filter.type = "peaking";
+      filter.frequency.value = f;
+      filter.Q.value = 1.1;
+      filter.gain.value = eqGains[i];
+      return filter;
+    });
     src.connect(gain);
-    gain.connect(offlineCtx.destination);
-    src.start(0);
+    filters.forEach(f => { node.connect(f); node = f; });
+    node.connect(offlineCtx.destination);
+
+    src.start(0, trimStart, trimEnd - trimStart);
     return offlineCtx.startRendering();
+  }
+
+  function hasAnyEdit() {
+    const gainDb = parseFloat(gainEl.value) || 0;
+    const speed = parseFloat(speedEl.value) || 1;
+    const pitch = parseFloat(pitchEl.value) || 0;
+    const trimmed = trimStart > 0.01 || trimEnd < duration - 0.01;
+    const eqTouched = eqGains.some(v => Math.abs(v) > 0.01);
+    const fades = (fadeInChk.checked && parseFloat(fadeInVal.value) > 0) || (fadeOutChk.checked && parseFloat(fadeOutVal.value) > 0);
+    return Boolean(gainDb || speed !== 1 || pitch || trimmed || eqTouched || fades);
   }
 
   applyBtn.addEventListener("click", async () => {
     if (!originalBuffer) { say("Pilih file audio dulu.", "error"); return; }
-    const opts = {
-      gainDb: parseFloat(gainEl.value) || 0,
-      fadeIn: parseFloat(fadeInEl.value) || 0,
-      fadeOut: parseFloat(fadeOutEl.value) || 0,
-      speed: parseFloat(speedEl.value) || 1
-    };
-    if (!opts.gainDb && !opts.fadeIn && !opts.fadeOut && opts.speed === 1) {
-      say("Geser slider dulu sebelum apply.", "error");
-      return;
-    }
-    stopPreview();
+    if (!hasAnyEdit()) { say("Belum ada perubahan buat disimpan.", "error"); return; }
+    stopPlayback();
     const prevLabel = applyBtn.textContent;
     applyBtn.disabled = true;
     applyBtn.textContent = "⏳ Processing...";
     try {
-      const rendered = await renderEdited(originalBuffer, opts);
+      const rendered = await renderEdited();
       const baseName = (originalFile.name || "track").replace(/\.[^/.]+$/, "");
-
       let blob = bufferToMp3(rendered, 192);
       let outName = `${baseName}-edited.mp3`;
       if (!blob) {
-        // MP3 encoder unavailable (e.g. CDN blocked) — fall back to WAV,
-        // but warn since it can be much larger and may hit the upload limit.
         blob = bufferToWav(rendered);
         outName = `${baseName}-edited.wav`;
         say("MP3 encoder gak bisa dimuat, pakai WAV (ukuran lebih besar).", "error");
       }
-
       const editedFile = new File([blob], outName, { type: blob.type });
       window.MusicLabTrack.set(editedFile);
       statusEl.textContent = "✅ Edited - ready to upload";
-      applyBtn.textContent = "✓ Applied";
+      applyBtn.textContent = "✓ Saved";
       say("Audio berhasil diedit ✓", "success");
     } catch (err) {
-      console.error("Apply edit failed:", err);
+      console.error("Save edit failed:", err);
       statusEl.textContent = "⚠ Gagal memproses edit";
       say("Gagal memproses audio.", "error");
     } finally {
@@ -426,10 +611,18 @@
   });
 
   resetBtn.addEventListener("click", () => {
-    gainEl.value = 0; fadeInEl.value = 0; fadeOutEl.value = 0; speedEl.value = 1;
-    updateBubbles();
-    audioEl.playbackRate = 1;
-    stopPreview();
+    stopPlayback();
+    gainEl.value = 0; gainVal.value = "0.00";
+    speedEl.value = 1; speedVal.value = "1.00";
+    pitchEl.value = 0; pitchVal.value = "0";
+    fadeInChk.checked = false; fadeOutChk.checked = false;
+    fadeInVal.value = 3; fadeOutVal.value = 3;
+    applyEqPreset("Default");
+    if (originalBuffer) {
+      trimStart = 0; trimEnd = duration; cursorPos = 0;
+      layoutTrimHandles();
+      drawPlayhead(0);
+    }
     if (audioCtx && gainNode) gainNode.gain.setValueAtTime(1, audioCtx.currentTime);
     if (originalFile) {
       window.MusicLabTrack.set(originalFile);

@@ -76,47 +76,88 @@
         <div id="advancedEditor" class="advanced-editor-card">
           <div class="editor-head">
             <div>
-              <h3>🎚 Advanced Sound Studio</h3>
+              <h3 id="editorTrackName">🎚 Advanced Sound Studio</h3>
               <p>Edit audio before Roblox upload</p>
             </div>
             <span id="editorStatus">Waiting audio...</span>
           </div>
 
-          <div class="editor-visual">
-            <canvas id="editorWave" class="wave-canvas" height="64"></canvas>
-            <canvas id="editorSpectrum" class="spectrum-canvas" height="72"></canvas>
+          <div class="editor-tabs" role="tablist">
+            <button class="tab-btn active" data-tab="trim" title="Pangkas">✂ <span>Pangkas</span></button>
+            <button class="tab-btn" data-tab="volume" title="Volume">🔊</button>
+            <button class="tab-btn" data-tab="speed" title="Speed">⏱</button>
+            <button class="tab-btn" data-tab="pitch" title="Pitch">〰</button>
+            <button class="tab-btn" data-tab="eq" title="Equalizer">▤</button>
           </div>
 
-          <div class="editor-grid">
-            <label>
-              <span class="editor-label-row"><span>Gain</span>
+          <div class="editor-visual">
+            <div class="wave-wrap" id="waveWrap">
+              <canvas id="editorWave" class="wave-canvas" height="90"></canvas>
+              <canvas id="editorSpectrum" class="spectrum-canvas" height="30"></canvas>
+              <div class="wave-watermark" id="waveWatermark"></div>
+              <div class="playhead" id="playhead"></div>
+              <div class="trim-dim trim-dim-left" id="trimDimLeft"></div>
+              <div class="trim-dim trim-dim-right" id="trimDimRight"></div>
+              <div class="trim-handle trim-handle-left" id="trimHandleLeft"></div>
+              <div class="trim-handle trim-handle-right" id="trimHandleRight"></div>
+            </div>
+            <div class="wave-times">
+              <span id="waveTimeStart">00:00.0</span>
+              <span id="waveTimeCursor">00:00.0</span>
+              <span id="waveTimeEnd">00:00.0</span>
+            </div>
+          </div>
+
+          <div class="tab-panel" data-panel="trim">
+            <p class="tab-hint">Geser gagang biru di ujung waveform buat pangkas awal/akhir lagu.</p>
+          </div>
+
+          <div class="tab-panel hidden" data-panel="volume">
+            <label class="big-slider">
+              <span class="editor-label-row"><span>Volume</span>
                 <span class="value-input-wrap"><input id="editorGainVal" type="number" step="0.01" min="-20" max="20" value="0.00" disabled><i>dB</i></span>
               </span>
               <input id="editorGain" type="range" min="-20" max="20" step="0.01" value="0" disabled>
             </label>
-            <label>
-              <span class="editor-label-row"><span>Fade In</span>
-                <span class="value-input-wrap"><input id="editorFadeInVal" type="number" step="0.01" min="0" max="10" value="0.00" disabled><i>s</i></span>
-              </span>
-              <input id="editorFadeIn" type="range" min="0" max="10" step="0.01" value="0" disabled>
-            </label>
-            <label>
-              <span class="editor-label-row"><span>Fade Out</span>
-                <span class="value-input-wrap"><input id="editorFadeOutVal" type="number" step="0.01" min="0" max="10" value="0.00" disabled><i>s</i></span>
-              </span>
-              <input id="editorFadeOut" type="range" min="0" max="10" step="0.01" value="0" disabled>
-            </label>
-            <label>
+          </div>
+
+          <div class="tab-panel hidden" data-panel="speed">
+            <label class="big-slider">
               <span class="editor-label-row"><span>Speed</span>
                 <span class="value-input-wrap"><input id="editorSpeedVal" type="number" step="0.01" min="0.5" max="2" value="1.00" disabled><i>x</i></span>
               </span>
               <input id="editorSpeed" type="range" min="0.5" max="2" step="0.01" value="1" disabled>
             </label>
           </div>
-          <div class="editor-actions">
-            <button id="editorPreview" class="ghost-btn" disabled>▶ Preview</button>
-            <button id="editorApply" class="ghost-btn" disabled>Apply Edit</button>
-            <button id="editorReset" class="ghost-btn" disabled>↺ Reset</button>
+
+          <div class="tab-panel hidden" data-panel="pitch">
+            <label class="big-slider">
+              <span class="editor-label-row"><span>Pitch</span>
+                <span class="value-input-wrap"><input id="editorPitchVal" type="number" step="1" min="-12" max="12" value="0" disabled><i>semitone</i></span>
+              </span>
+              <input id="editorPitch" type="range" min="-12" max="12" step="1" value="0" disabled>
+            </label>
+          </div>
+
+          <div class="tab-panel hidden" data-panel="eq">
+            <div class="eq-presets" id="eqPresets"></div>
+            <div class="eq-bands" id="eqBands"></div>
+          </div>
+
+          <div class="editor-common">
+            <div class="fade-row">
+              <label class="fade-chk"><input type="checkbox" id="fadeInChk" disabled> Fade In
+                <input type="number" id="editorFadeInVal" min="0" max="30" step="0.5" value="3" disabled> sec</label>
+              <label class="fade-chk"><input type="checkbox" id="fadeOutChk" disabled> Fade Out
+                <input type="number" id="editorFadeOutVal" min="0" max="30" step="0.5" value="3" disabled> sec</label>
+            </div>
+            <div class="transport-row">
+              <button id="editorPlay" class="play-btn" disabled>▶</button>
+              <span id="trimRangeLabel" class="trim-range-label">00:00.0 — 00:00.0</span>
+              <span class="spacer"></span>
+              <button id="editorApply" class="ghost-btn" disabled>Save</button>
+              <button id="editorReset" class="ghost-btn" disabled>↺ Reset</button>
+            </div>
           </div>
         </div>
 
