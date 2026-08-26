@@ -10,3 +10,4 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./data:/app/data
+      - ./cookies.txt:/app/cookies.txt:ro

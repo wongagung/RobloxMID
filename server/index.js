@@ -480,11 +480,13 @@ app.post("/api/fetch-url", express.json(), async (req, res) => {
     // and use cookies-from-browser fallback via po_token workaround.
     // --extractor-args bypasses bot detection on YouTube without needing
     // a real browser cookie export.
-    const nodePath = process.execPath; // e.g. /usr/local/bin/node
+    const nodePath = process.execPath;
+    const cookiesPath = path.join(root, "cookies.txt");
+    const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 0;
     const ytFlags = [
-      "--js-runtimes", `nodejs:${nodePath}`,
-      "--extractor-args", "youtube:player_client=web,mweb",
+      "--js-runtimes", `node:${nodePath}`,
       "--no-playlist",
+      ...(hasCookies ? ["--cookies", cookiesPath] : []),
     ];
 
     // First: get metadata (title)
