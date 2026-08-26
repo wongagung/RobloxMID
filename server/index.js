@@ -483,10 +483,13 @@ app.post("/api/fetch-url", express.json(), async (req, res) => {
     const nodePath = process.execPath;
     const cookiesPath = path.join(root, "cookies.txt");
     const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 0;
+    // bgutil-ytdlp-pot-provider handles PO token automatically via its plugin
+    // when installed — no manual token management needed.
     const ytFlags = [
       "--js-runtimes", `node:${nodePath}`,
       "--remote-components", "ejs:github",
       "--no-playlist",
+      "--extractor-args", "youtube:player_client=web,mweb",
       ...(hasCookies ? ["--cookies", cookiesPath] : []),
     ];
 

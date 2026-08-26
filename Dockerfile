@@ -1,10 +1,7 @@
 FROM node:22-alpine
 
 RUN apk add --no-cache ffmpeg curl python3 py3-pip \
-    && pip3 install --break-system-packages yt-dlp
-
-# Verify yt-dlp can find node at build time
-RUN yt-dlp --version
+    && pip3 install --break-system-packages yt-dlp bgutil-ytdlp-pot-provider
 
 WORKDIR /app
 COPY package*.json ./

@@ -1,8 +1,17 @@
 services:
+  bgutil:
+    image: brainicism/bgutil-ytdlp-pot-provider:latest
+    container_name: bgutil-pot-server
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4416:4416"
+
   roblox-music-uploader:
     build: .
     container_name: roblox-music-uploader
     restart: unless-stopped
+    depends_on:
+      - bgutil
     env_file:
       - .env
     ports:
