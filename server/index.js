@@ -480,6 +480,52 @@ app.get("/api/cookies-status", (_, res) => {
 });
 // ────────────────────────────────────────────────────────────────────────────
 
+// ── URL metadata preview ─────────────────────────────────────────────────────
+app.post("/api/url-info", express.json(), async (req, res) => {
+  const { url } = req.body || {};
+  if (!url || typeof url !== "string") return res.status(400).json({ error: "URL tidak valid." });
+
+  let parsed;
+  try { parsed = new URL(url); } catch {
+    return res.status(400).json({ error: "URL tidak dapat diparse." });
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    return res.status(400).json({ error: "Hanya URL http/https yang didukung." });
+  }
+
+  const nodePath = process.execPath;
+  const cookiesPath = path.join(root, "cookies.txt");
+  const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 0;
+  const flags = [
+    "--js-runtimes", `node:${nodePath}`,
+    "--remote-components", "ejs:github",
+    "--no-playlist",
+    "--dump-json",
+    ...(hasCookies ? ["--cookies", cookiesPath] : []),
+    url,
+  ];
+
+  try {
+    const { stdout } = await execFileAsync("yt-dlp", flags, { timeout: 30000 });
+    const info = JSON.parse(stdout.trim().split("\n")[0]);
+    res.json({
+      title: (info.title || info.fulltitle || "Unknown").slice(0, 100),
+      duration: info.duration || 0,
+      duration_string: info.duration_string || "",
+      thumbnail: info.thumbnail || null,
+      uploader: info.uploader || info.channel || "",
+      webpage_url: info.webpage_url || url,
+    });
+  } catch (err) {
+    const msg = err.message || "";
+    if (msg.includes("Sign in") || msg.includes("bot")) {
+      return res.status(403).json({ error: "YouTube meminta login. Upload cookies.txt terbaru." });
+    }
+    res.status(502).json({ error: "Gagal mengambil info. Pastikan URL valid." });
+  }
+});
+// ────────────────────────────────────────────────────────────────────────────
+
 app.post("/api/fetch-url", express.json(), async (req, res) => {
   const { url } = req.body || {};
   if (!url || typeof url !== "string") {

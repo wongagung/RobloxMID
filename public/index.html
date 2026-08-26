@@ -70,10 +70,20 @@
             <p class="url-hint">YouTube, SoundCloud, Spotify preview, Bandcamp, Vimeo, dan 1000+ situs lainnya</p>
             <div class="url-input-row">
               <input id="urlInput" type="url" placeholder="https://youtube.com/watch?v=... atau link lainnya" autocomplete="off" spellcheck="false">
-              <button id="urlFetchBtn" class="ghost-btn">Download</button>
+              <button id="urlInfoBtn" class="ghost-btn">Cek Info</button>
             </div>
             <div id="urlStatus" class="url-status hidden">
               <span id="urlStatusText">Mendownload...</span>
+            </div>
+            <!-- Metadata preview card -->
+            <div id="urlPreviewCard" class="url-preview hidden">
+              <img id="urlThumb" src="" alt="" class="url-thumb">
+              <div class="url-meta">
+                <div id="urlTitle" class="url-meta-title"></div>
+                <div id="urlUploader" class="url-meta-sub"></div>
+                <div id="urlDuration" class="url-meta-sub"></div>
+              </div>
+              <button id="urlFetchBtn" class="primary-btn url-dl-btn">⬇ Download & Pakai</button>
             </div>
             <!-- Cookies upload -->
             <details class="cookies-details">

@@ -105,30 +105,77 @@ document.querySelectorAll(".source-tab").forEach(btn => {
 
 // ── URL fetch ────────────────────────────────────────────────────────────────
 const urlInput = $("#urlInput");
+const urlInfoBtn = $("#urlInfoBtn");
 const urlFetchBtn = $("#urlFetchBtn");
 const urlStatus = $("#urlStatus");
 const urlStatusText = $("#urlStatusText");
+const urlPreviewCard = $("#urlPreviewCard");
 
 function setUrlStatus(msg, isError = false) {
   urlStatus.classList.remove("hidden");
   urlStatusText.textContent = msg;
   urlStatus.className = "url-status" + (isError ? " error" : " info");
 }
-
 function clearUrlStatus() { urlStatus.classList.add("hidden"); }
+
+// Reset preview card
+function resetPreview() {
+  urlPreviewCard.classList.add("hidden");
+  urlFetchBtn.disabled = true;
+}
 
 urlInput.addEventListener("input", () => {
   clearUrlStatus();
-  urlFetchBtn.disabled = !urlInput.value.trim();
+  resetPreview();
+  urlInfoBtn.disabled = !urlInput.value.trim();
 });
-urlFetchBtn.disabled = true;
+urlInfoBtn.disabled = true;
 
+// Step 1: Cek Info
+urlInfoBtn.onclick = async () => {
+  const url = urlInput.value.trim();
+  if (!url) return;
+  urlInfoBtn.disabled = true;
+  resetPreview();
+  setUrlStatus("⏳ Mengambil info...");
+
+  try {
+    const resp = await fetch("/api/url-info", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Gagal mengambil info.");
+
+    // Populate preview card
+    const thumb = $("#urlThumb");
+    if (data.thumbnail) {
+      thumb.src = data.thumbnail;
+      thumb.classList.remove("hidden");
+    } else {
+      thumb.classList.add("hidden");
+    }
+    $("#urlTitle").textContent = data.title;
+    $("#urlUploader").textContent = data.uploader || "";
+    $("#urlDuration").textContent = data.duration_string ? `⏱ ${data.duration_string}` : "";
+    urlPreviewCard.classList.remove("hidden");
+    urlFetchBtn.disabled = false;
+    clearUrlStatus();
+  } catch (err) {
+    setUrlStatus("✗ " + (err.message || "Gagal mengambil info."), true);
+  }
+  urlInfoBtn.disabled = false;
+};
+
+// Step 2: Download & Pakai
+urlFetchBtn.disabled = true;
 urlFetchBtn.onclick = async () => {
   const url = urlInput.value.trim();
   if (!url) return;
-
   urlFetchBtn.disabled = true;
-  setUrlStatus("⏳ Menghubungi server dan mendownload audio...");
+  urlInfoBtn.disabled = true;
+  setUrlStatus("⏳ Mendownload audio...");
 
   try {
     const resp = await fetch("/api/fetch-url", {
@@ -142,30 +189,27 @@ urlFetchBtn.onclick = async () => {
       throw new Error(err.error || "Gagal mendownload.");
     }
 
-    // Extract title from response header
     const rawTitle = resp.headers.get("X-Track-Title") || "";
-    const title = rawTitle ? decodeURIComponent(rawTitle) : "Track";
+    const title = rawTitle ? decodeURIComponent(rawTitle) : $("#urlTitle").textContent || "Track";
 
     const blob = await resp.blob();
     const file = new File([blob], `${title}.mp3`, { type: "audio/mpeg" });
 
-    setUrlStatus(`✓ Berhasil: "${title}" — memuat ke editor...`);
+    setUrlStatus(`✓ Berhasil — memuat ke editor...`);
     selectFile(file);
-
-    // Pre-fill asset name with title
     $("#assetName").value = clampAssetName(title);
     refreshUploadButton();
-
-    // Switch back to show the selected file info
+    resetPreview();
     setTimeout(clearUrlStatus, 3000);
   } catch (err) {
     setUrlStatus("✗ " + (err.message || "Gagal mendownload."), true);
     urlFetchBtn.disabled = false;
   }
+  urlInfoBtn.disabled = false;
 };
 
 urlInput.addEventListener("keydown", e => {
-  if (e.key === "Enter") urlFetchBtn.click();
+  if (e.key === "Enter") urlInfoBtn.click();
 });
 
 // ── Cookies upload ────────────────────────────────────────────────────────────

@@ -179,3 +179,41 @@ body.light{--bg:#f5f7fb;--panel:rgba(255,255,255,.84);--line:rgba(15,23,42,.1);-
   display: flex; flex-direction: column; gap: 8px;
 }
 .cookies-panel p { font-size: 12px; color: var(--text-muted); line-height: 1.5; margin: 0; }
+
+/* ── URL preview card ───────────────────────────────────────────────────── */
+.url-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 480px;
+  background: var(--surface-2, rgba(255,255,255,.04));
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: left;
+}
+.url-thumb {
+  width: 72px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+  background: var(--border);
+}
+.url-meta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.url-meta-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.url-meta-sub { font-size: 11px; color: var(--text-muted); }
+.url-dl-btn {
+  flex-shrink: 0;
+  padding: 8px 14px !important;
+  font-size: 12px !important;
+  white-space: nowrap;
+}
