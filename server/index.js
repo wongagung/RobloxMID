@@ -152,8 +152,7 @@ if (APP_PASSWORD) {
   app.use((req, res, next) => {
     if (req.path === "/login" || req.path === "/api/auth") return next();
     const ip = req.ip || req.socket?.remoteAddress || "";
-    console.log("[auth] ip:", ip, "path:", req.path);
-    if (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1") return next();
+    if (ip === "127.0.0.1" || ip === "::1" || ip === "::ffff:127.0.0.1" || ip.startsWith("::ffff:172.") || ip.startsWith("172.")) return next();
     if (parseAuthCookie(req.headers.cookie)) return next();
     if (req.path.startsWith("/api/")) {
       return res.status(401).json({ error: "Unauthorized. Login diperlukan." });
