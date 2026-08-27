@@ -861,6 +861,23 @@ $("#logoutBtn").onclick = async () => {
     $("#telegramService").classList.toggle("off", !cfg.telegramConfigured);
     $("#ytdlpService").classList.toggle("off", !cfg.ytdlpAvailable);
     if (cfg.ytdlpAvailable) $("#ytdlpUpdateBtn").style.display = "";
+
+    // Auto-vary toggle
+    const varyBtn = $("#autoVaryToggle");
+    if (varyBtn) {
+      let _autoVary = cfg.autoVary !== false;
+      const updateVaryBtn = () => {
+        varyBtn.textContent = _autoVary ? "ON" : "OFF";
+        varyBtn.className = "vary-toggle " + (_autoVary ? "vary-on" : "vary-off");
+      };
+      updateVaryBtn();
+      varyBtn.onclick = async () => {
+        const r = await fetch("/api/toggle-auto-vary", { method: "POST" });
+        const d = await r.json();
+        _autoVary = d.autoVary;
+        updateVaryBtn();
+      };
+    }
     $("#serverBadge").innerHTML = "<i></i> Online";
   } catch {
     $("#serverBadge").innerHTML = "<i></i> Offline";

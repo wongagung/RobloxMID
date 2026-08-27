@@ -193,6 +193,47 @@ function safeUnlink(filePath) {
   }
 }
 
+// ── Roblox optimization: mono 44100Hz 128kbps + micro-variation ──────────────
+async function optimizeForRoblox(inputPath, { autoVary = true } = {}) {
+  const tmpId = crypto.randomUUID();
+  const outputPath = path.join(uploadsDir, `${tmpId}-roblox.mp3`);
+
+  // Micro-variation params — random but subtle enough to be inaudible
+  const pitchCents = autoVary ? (Math.random() * 60 - 30) : 0;   // ±30 cents (~0.3 semitone)
+  const tempoRate  = autoVary ? (1 + (Math.random() * 0.01 - 0.005)) : 1; // ±0.5%
+  const noiseVol   = autoVary ? (Math.random() * 0.0008).toFixed(6) : "0"; // tiny noise floor
+
+  // Build ffmpeg filter chain
+  const filters = [];
+  if (autoVary) {
+    // asetrate shifts pitch without changing duration, then atempo corrects speed
+    filters.push(`asetrate=44100*${(1 + pitchCents / 1200).toFixed(6)}`);
+    filters.push(`atempo=${(1 / (1 + pitchCents / 1200)).toFixed(6)}`); // compensate duration
+    filters.push(`atempo=${tempoRate.toFixed(6)}`);                      // apply tempo variation
+    filters.push(`aeval=val(0)+${noiseVol}*(random(0)-0.5):val(1)+${noiseVol}*(random(1)-0.5)`); // micro noise
+  }
+  // Always: convert to mono 44100Hz for Roblox optimization
+  filters.push("pan=mono|c0=0.5*c0+0.5*c1");  // proper stereo-to-mono downmix
+  const filterStr = filters.join(",");
+
+  await execFileAsync("ffmpeg", [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-i", inputPath,
+    "-vn",
+    "-af", filterStr,
+    "-ac", "1",          // mono
+    "-ar", "44100",      // 44.1kHz
+    "-b:a", "128k",      // 128kbps — sweet spot for Roblox
+    "-map_metadata", "-1", // strip all metadata
+    outputPath
+  ], { maxBuffer: 1024 * 1024 * 32, timeout: 120000 });
+
+  const stat = fs.statSync(outputPath);
+  if (!stat.size) throw new Error("FFmpeg menghasilkan file kosong.");
+  return outputPath;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 async function convertToRobloxMp3(inputPath) {
   const ext = path.extname(inputPath).toLowerCase();
   if (supported.has(ext)) return { filePath: inputPath, converted: false };
@@ -245,10 +286,21 @@ app.get("/api/config", async (_, res) => {
     autoConvert: true,
     ytdlpAvailable: Boolean(ytdlpVersion),
     ytdlpVersion,
+    autoVary: process.env.AUTO_VARY !== "false",
+    robloxOptimize: true, // always mono 44100Hz 128kbps
     robloxConfigured: Boolean(process.env.ROBLOX_API_KEY && process.env.ROBLOX_USER_ID),
     telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID)
   });
 });
+
+// ── Toggle auto-vary ─────────────────────────────────────────────────────────
+app.post("/api/toggle-auto-vary", express.json(), (req, res) => {
+  const current = process.env.AUTO_VARY !== "false";
+  const next = !current;
+  process.env.AUTO_VARY = next ? "true" : "false";
+  res.json({ autoVary: next });
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Update yt-dlp ─────────────────────────────────────────────────────────────
 let ytdlpUpdateRunning = false;
@@ -477,13 +529,26 @@ async function processAudio(record, originalFilePath) {
         item.roblox.status = "uploading";
         writeHistory(history);
 
+        // Optimize for Roblox: mono 44100Hz 128kbps + micro-variation
+        const autoVary = process.env.AUTO_VARY !== "false"; // default on
+        let optimizedPath = null;
+        try {
+          optimizedPath = await optimizeForRoblox(workingFilePath, { autoVary });
+        } catch (e) {
+          console.warn("[optimize] Gagal optimasi, pakai file original:", e.message);
+        }
+        const uploadPath = optimizedPath || workingFilePath;
+
         const result = await uploadAudioToRoblox({
-          filePath: workingFilePath,
+          filePath: uploadPath,
           displayName: record.name,
           description: `Uploaded with Roblox Music Uploader — ${record.originalName}`,
           userId: process.env.ROBLOX_USER_ID,
           apiKey: process.env.ROBLOX_API_KEY
         });
+
+        // Cleanup optimized temp file
+        if (optimizedPath) safeUnlink(optimizedPath);
 
         history = readHistory();
         item = history.find(x => x.id === record.id);
