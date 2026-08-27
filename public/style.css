@@ -333,3 +333,22 @@ body.light{--bg:#f5f7fb;--panel:rgba(255,255,255,.84);--line:rgba(15,23,42,.1);-
 
 /* yt service badge */
 .service-logo.yt { background: #ff000018; color: #ff6b6b; }
+
+/* ── Progress bar ───────────────────────────────────────────────────────── */
+.url-progress-wrap {
+  width: 100%;
+  max-width: 500px;
+  height: 4px;
+  background: #ffffff0a;
+  border-radius: 99px;
+  overflow: hidden;
+}
+.url-progress-bar {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #7c3aed, #0891b2);
+  transition: width .4s ease;
+}
+.url-progress-bar.done {
+  background: linear-gradient(90deg, #059669, #0891b2);
+}

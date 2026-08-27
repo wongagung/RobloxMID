@@ -4,7 +4,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import crypto from "crypto";
-import { execFile } from "child_process";
+import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
 import { uploadAudioToRoblox, getAssetModerationStatus } from "./roblox.js";
@@ -523,6 +523,162 @@ app.post("/api/url-info", express.json(), async (req, res) => {
     }
     res.status(502).json({ error: "Gagal mengambil info. Pastikan URL valid." });
   }
+});
+// ────────────────────────────────────────────────────────────────────────────
+
+// ── SSE streaming download ───────────────────────────────────────────────────
+app.get("/api/fetch-url-stream", async (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).end();
+
+  // SSE headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const nodePath = process.execPath;
+  const cookiesPath = path.join(root, "cookies.txt");
+  const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 0;
+  const ytFlags = [
+    "--js-runtimes", `node:${nodePath}`,
+    "--remote-components", "ejs:github",
+    "--no-playlist",
+    ...(hasCookies ? ["--cookies", cookiesPath] : []),
+  ];
+
+  const tmpId = `${Date.now()}-${crypto.randomUUID()}`;
+  const outputTemplate = path.join(uploadsDir, `${tmpId}.%(ext)s`);
+
+  // Step 1: get metadata
+  send("progress", { step: "info", message: "Mengambil informasi track..." });
+
+  let title = "Track";
+  try {
+    const { stdout: infoRaw } = await execFileAsync("yt-dlp",
+      [...ytFlags, "--dump-json", url],
+      { timeout: 30000 }
+    );
+    const info = JSON.parse(infoRaw.trim().split("\n")[0]);
+    title = (info.title || info.fulltitle || "Track").slice(0, 50).trim() || "Track";
+    const duration = info.duration || 0;
+    if (duration > 1800) {
+      send("error", { message: "Audio terlalu panjang. Maksimal 30 menit." });
+      return res.end();
+    }
+    send("progress", { step: "meta", message: `Ditemukan: ${title}`, title });
+  } catch (err) {
+    const msg = err.message || "";
+    const isBotBlock = msg.includes("Sign in") || msg.includes("bot") || msg.includes("cookies");
+    send("error", {
+      message: isBotBlock
+        ? "YouTube meminta login. Upload cookies.txt terbaru."
+        : "Gagal mengambil info track.",
+      cookiesExpired: isBotBlock,
+    });
+    return res.end();
+  }
+
+  // Step 2: download with real-time progress
+  send("progress", { step: "download", message: "Mendownload audio...", percent: 0 });
+
+  await new Promise((resolve, reject) => {
+    const args = [
+      ...ytFlags,
+      "-f", "bestaudio/best",
+      "-x",
+      "--audio-format", "mp3",
+      "--audio-quality", "192K",
+      "--max-filesize", `${MAX_MB}m`,
+      "--newline",           // one progress line per line
+      "--progress",
+      "-o", outputTemplate,
+      url,
+    ];
+
+    const proc = spawn("yt-dlp", args);
+    let stderr = "";
+
+    proc.stdout.on("data", (chunk) => {
+      const lines = chunk.toString().split("\n");
+      for (const line of lines) {
+        // Parse yt-dlp progress: [download]  42.3% of 5.23MiB at 1.20MiB/s ETA 00:03
+        const m = line.match(/\[download\]\s+(\d+\.?\d*)%/);
+        if (m) {
+          const percent = parseFloat(m[1]);
+          send("progress", {
+            step: "download",
+            message: `Mendownload audio... ${Math.round(percent)}%`,
+            percent,
+          });
+        }
+        // ffmpeg conversion
+        if (line.includes("[ExtractAudio]") || line.includes("[ffmpeg]")) {
+          send("progress", { step: "convert", message: "Mengkonversi ke MP3...", percent: 100 });
+        }
+      }
+    });
+
+    proc.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
+
+    proc.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr));
+    });
+
+    req.on("close", () => proc.kill());
+  }).catch(async (err) => {
+    const msg = err.message || "";
+    const isBotBlock = msg.includes("Sign in") || msg.includes("bot") || msg.includes("cookies");
+    // cleanup
+    try {
+      fs.readdirSync(uploadsDir)
+        .filter(f => f.startsWith(tmpId))
+        .forEach(f => safeUnlink(path.join(uploadsDir, f)));
+    } catch {}
+    send("error", {
+      message: isBotBlock
+        ? "YouTube meminta login. Upload cookies.txt terbaru."
+        : "Gagal mendownload audio.",
+      cookiesExpired: isBotBlock,
+    });
+    res.end();
+    return "handled";
+  }).then(async (result) => {
+    if (result === "handled") return;
+
+    // Step 3: find file and stream
+    send("progress", { step: "done", message: "Selesai! Memuat ke editor...", percent: 100 });
+
+    const files = fs.readdirSync(uploadsDir)
+      .filter(f => f.startsWith(tmpId))
+      .map(f => path.join(uploadsDir, f));
+
+    if (!files.length) {
+      send("error", { message: "File output tidak ditemukan." });
+      return res.end();
+    }
+
+    const downloadedPath = files[0];
+    const stat = fs.statSync(downloadedPath);
+
+    if (stat.size > MAX_MB * 1024 * 1024) {
+      safeUnlink(downloadedPath);
+      send("error", { message: `File terlalu besar. Maksimal ${MAX_MB} MB.` });
+      return res.end();
+    }
+
+    // Send file as base64 over SSE
+    const audioData = fs.readFileSync(downloadedPath).toString("base64");
+    safeUnlink(downloadedPath);
+    send("file", { title, data: audioData, mimeType: "audio/mpeg" });
+    res.end();
+  });
 });
 // ────────────────────────────────────────────────────────────────────────────
 

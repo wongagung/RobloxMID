@@ -168,45 +168,102 @@ urlInfoBtn.onclick = async () => {
   urlInfoBtn.disabled = false;
 };
 
-// Step 2: Download & Pakai
+// Step 2: Download & Pakai — SSE streaming with realtime progress
 urlFetchBtn.disabled = true;
-urlFetchBtn.onclick = async () => {
+urlFetchBtn.onclick = () => {
   const url = urlInput.value.trim();
   if (!url) return;
   urlFetchBtn.disabled = true;
   urlInfoBtn.disabled = true;
-  setUrlStatus("⏳ Mendownload audio...");
 
-  try {
-    const resp = await fetch("/api/fetch-url", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url })
-    });
+  // Progress bar UI
+  setUrlStatus("⏳ Menghubungi server...");
+  showProgressBar(0);
 
-    if (!resp.ok) {
-      const err = await resp.json().catch(() => ({}));
-      throw new Error(err.error || "Gagal mendownload.");
-    }
+  const evtSrc = new EventSource(`/api/fetch-url-stream?url=${encodeURIComponent(url)}`);
 
-    const rawTitle = resp.headers.get("X-Track-Title") || "";
-    const title = rawTitle ? decodeURIComponent(rawTitle) : $("#urlTitle").textContent || "Track";
+  evtSrc.addEventListener("progress", (e) => {
+    const d = JSON.parse(e.data);
+    setUrlStatus("⏳ " + d.message);
+    if (d.percent !== undefined) showProgressBar(d.percent);
+  });
 
-    const blob = await resp.blob();
-    const file = new File([blob], `${title}.mp3`, { type: "audio/mpeg" });
-
+  evtSrc.addEventListener("file", (e) => {
+    evtSrc.close();
+    hideProgressBar();
+    const d = JSON.parse(e.data);
+    // decode base64 → Blob → File
+    const bytes = Uint8Array.from(atob(d.data), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: d.mimeType });
+    const file = new File([blob], `${d.title}.mp3`, { type: d.mimeType });
     setUrlStatus(`✓ Berhasil — memuat ke editor...`);
     selectFile(file);
-    $("#assetName").value = clampAssetName(title);
+    $("#assetName").value = clampAssetName(d.title);
     refreshUploadButton();
     resetPreview();
     setTimeout(clearUrlStatus, 3000);
-  } catch (err) {
-    setUrlStatus("✗ " + (err.message || "Gagal mendownload."), true);
     urlFetchBtn.disabled = false;
-  }
-  urlInfoBtn.disabled = false;
+    urlInfoBtn.disabled = false;
+  });
+
+  evtSrc.addEventListener("error", (e) => {
+    evtSrc.close();
+    hideProgressBar();
+    let msg = "Gagal mendownload.";
+    let cookiesExpired = false;
+    try { const d = JSON.parse(e.data); msg = d.message; cookiesExpired = d.cookiesExpired; } catch {}
+    setUrlStatus("✗ " + msg, true);
+    if (cookiesExpired) showCookiesAlert();
+    urlFetchBtn.disabled = false;
+    urlInfoBtn.disabled = false;
+  });
+
+  // Fallback: native EventSource error (connection lost)
+  evtSrc.onerror = () => {
+    if (evtSrc.readyState === EventSource.CLOSED) return;
+    evtSrc.close();
+    hideProgressBar();
+    setUrlStatus("✗ Koneksi terputus.", true);
+    urlFetchBtn.disabled = false;
+    urlInfoBtn.disabled = false;
+  };
 };
+
+// ── Progress bar helpers ─────────────────────────────────────────────────────
+function showProgressBar(percent) {
+  let bar = $("#urlProgressBar");
+  if (!bar) {
+    const wrap = document.createElement("div");
+    wrap.id = "urlProgressWrap";
+    wrap.className = "url-progress-wrap";
+    wrap.innerHTML = `<div id="urlProgressBar" class="url-progress-bar" style="width:0%"></div>`;
+    urlStatus.insertAdjacentElement("afterend", wrap);
+    bar = $("#urlProgressBar");
+  }
+  bar.style.width = Math.max(4, percent) + "%";
+  if (percent >= 100) bar.classList.add("done");
+  else bar.classList.remove("done");
+}
+
+function hideProgressBar() {
+  const wrap = $("#urlProgressWrap");
+  if (wrap) wrap.remove();
+}
+
+// ── Cookies expired alert ────────────────────────────────────────────────────
+function showCookiesAlert() {
+  const details = document.querySelector(".cookies-details");
+  if (details) {
+    details.open = true;
+    details.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    details.style.border = "1px solid #ef444466";
+    details.style.boxShadow = "0 0 0 3px #ef444418";
+    setTimeout(() => {
+      details.style.border = "";
+      details.style.boxShadow = "";
+    }, 4000);
+  }
+}
 
 urlInput.addEventListener("keydown", e => {
   if (e.key === "Enter") urlInfoBtn.click();
