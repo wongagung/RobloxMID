@@ -253,7 +253,7 @@ app.get("/api/config", async (_, res) => {
 // ── Update yt-dlp ─────────────────────────────────────────────────────────────
 let ytdlpUpdateRunning = false;
 
-app.post("/api/update-ytdlp", async (req, res) => {
+app.get("/api/update-ytdlp", async (req, res) => {
   if (ytdlpUpdateRunning) {
     return res.status(409).json({ error: "Update sedang berjalan." });
   }
