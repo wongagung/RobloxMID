@@ -53,8 +53,16 @@
     "Full treble":        [-3,-3,-2,-1,0,2,4,5,6,6]
   };
 
+  const reverbEl  = document.getElementById("editorReverb");
+  const reverbVal = document.getElementById("editorReverbVal");
+  const roomEl    = document.getElementById("editorRoom");
+  const roomVal   = document.getElementById("editorRoomVal");
+  const stereoEl  = document.getElementById("editorStereo");
+  const stereoVal = document.getElementById("editorStereoVal");
+
   let allEnabled = [gainEl, gainVal, speedEl, speedVal, pitchEl, pitchVal,
-    fadeInChk, fadeOutChk, fadeInVal, fadeOutVal, playBtn, applyBtn, resetBtn];
+    fadeInChk, fadeOutChk, fadeInVal, fadeOutVal, playBtn, applyBtn, resetBtn,
+    reverbEl, reverbVal, roomEl, roomVal, stereoEl, stereoVal];
 
   // ---- Web Audio graph ----
   let audioCtx = null;
@@ -63,6 +71,11 @@
   let eqFilters = [];
   let eqGains = EQ_FREQS.map(() => 0);
   let activePreset = "Default";
+  let reverbNode = null;
+  let reverbDry = null;
+  let reverbWet = null;
+  let stereoSplitter = null;
+  let stereoPanner = null;
 
   // ---- Track state ----
   let originalFile = null;
@@ -169,6 +182,23 @@
 
   buildEqUI();
 
+  // ---------- Reverb impulse response ----------
+  function buildImpulseResponse(ctx) {
+    const roomPct = parseFloat(roomEl?.value || 50) / 100;
+    const duration = 0.5 + roomPct * 2.5;  // 0.5s – 3.0s
+    const decay    = 0.5 + roomPct * 4.5;  // 0.5  – 5.0
+    const sampleRate = ctx.sampleRate;
+    const length   = Math.floor(sampleRate * duration);
+    const ir       = ctx.createBuffer(2, length, sampleRate);
+    for (let ch = 0; ch < 2; ch++) {
+      const d = ir.getChannelData(ch);
+      for (let i = 0; i < length; i++) {
+        d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, decay);
+      }
+    }
+    if (reverbNode) reverbNode.buffer = ir;
+  }
+
   // ---------- Web Audio graph setup ----------
   function ensureContext() {
     if (!audioCtx) {
@@ -189,7 +219,25 @@
         node = filter;
         return filter;
       });
-      node.connect(analyser);
+
+      // Reverb (convolver) — dry/wet mix
+      reverbDry = audioCtx.createGain();
+      reverbWet = audioCtx.createGain();
+      reverbNode = audioCtx.createConvolver();
+      reverbDry.gain.value = 1;
+      reverbWet.gain.value = 0;
+      node.connect(reverbDry);
+      node.connect(reverbNode);
+      reverbNode.connect(reverbWet);
+      buildImpulseResponse(audioCtx);
+
+      // Stereo panner
+      stereoPanner = audioCtx.createStereoPanner();
+      stereoPanner.pan.value = 0;
+
+      reverbDry.connect(stereoPanner);
+      reverbWet.connect(stereoPanner);
+      stereoPanner.connect(analyser);
       analyser.connect(audioCtx.destination);
     }
     if (audioCtx.state === "suspended") audioCtx.resume();
@@ -368,6 +416,14 @@
   bindPair(gainEl, gainVal, v => { if (isPlaying) gainNode.gain.setTargetAtTime(dbToGain(v), audioCtx.currentTime, 0.05); });
   bindPair(speedEl, speedVal, v => { if (isPlaying && playSource) playSource.playbackRate.value = v; });
   bindPair(pitchEl, pitchVal, v => { if (isPlaying && playSource && playSource.detune) playSource.detune.setTargetAtTime(v * 100, audioCtx.currentTime, 0.02); });
+  bindPair(reverbEl, reverbVal, v => {
+    if (reverbWet) reverbWet.gain.setTargetAtTime(v / 100, audioCtx.currentTime, 0.05);
+    if (reverbDry) reverbDry.gain.setTargetAtTime(1 - v / 100, audioCtx.currentTime, 0.05);
+  });
+  bindPair(roomEl, roomVal, () => { if (audioCtx) buildImpulseResponse(audioCtx); });
+  bindPair(stereoEl, stereoVal, v => {
+    if (stereoPanner) stereoPanner.pan.setTargetAtTime(v / 100, audioCtx.currentTime, 0.05);
+  });
 
   // ---------- Playback engine ----------
   function stopPlayback() {
@@ -563,7 +619,56 @@
     });
     src.connect(gain);
     filters.forEach(f => { node.connect(f); node = f; });
-    node.connect(offlineCtx.destination);
+
+    // Reverb
+    const reverbMix = clamp(parseFloat(reverbEl?.value || 0), 0, 100) / 100;
+    if (reverbMix > 0) {
+      const dry = offlineCtx.createGain();
+      const wet = offlineCtx.createGain();
+      const conv = offlineCtx.createConvolver();
+      dry.gain.value = 1 - reverbMix;
+      wet.gain.value = reverbMix;
+      // Build IR for offline context
+      const roomPct = clamp(parseFloat(roomEl?.value || 50), 0, 100) / 100;
+      const irDur = 0.5 + roomPct * 2.5;
+      const irDecay = 0.5 + roomPct * 4.5;
+      const irLen = Math.floor(offlineCtx.sampleRate * irDur);
+      const ir = offlineCtx.createBuffer(2, irLen, offlineCtx.sampleRate);
+      for (let ch = 0; ch < 2; ch++) {
+        const d = ir.getChannelData(ch);
+        for (let i = 0; i < irLen; i++) {
+          d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / irLen, irDecay);
+        }
+      }
+      conv.buffer = ir;
+      const merger = offlineCtx.createChannelMerger(2);
+      node.connect(dry);
+      node.connect(conv);
+      conv.connect(wet);
+      // extend output length to include reverb tail
+      dry.connect(offlineCtx.destination);
+      wet.connect(offlineCtx.destination);
+      // Stereo after reverb
+      const stereoPan = clamp(parseFloat(stereoEl?.value || 0), -100, 100) / 100;
+      if (Math.abs(stereoPan) > 0.01) {
+        const panner = offlineCtx.createStereoPanner();
+        panner.pan.value = stereoPan;
+        dry.disconnect(); wet.disconnect();
+        dry.connect(panner); wet.connect(panner);
+        panner.connect(offlineCtx.destination);
+      }
+    } else {
+      // Stereo only
+      const stereoPan = clamp(parseFloat(stereoEl?.value || 0), -100, 100) / 100;
+      if (Math.abs(stereoPan) > 0.01) {
+        const panner = offlineCtx.createStereoPanner();
+        panner.pan.value = stereoPan;
+        node.connect(panner);
+        panner.connect(offlineCtx.destination);
+      } else {
+        node.connect(offlineCtx.destination);
+      }
+    }
 
     src.start(0, trimStart, trimEnd - trimStart);
     return offlineCtx.startRendering();
@@ -576,7 +681,9 @@
     const trimmed = trimStart > 0.01 || trimEnd < duration - 0.01;
     const eqTouched = eqGains.some(v => Math.abs(v) > 0.01);
     const fades = (fadeInChk.checked && parseFloat(fadeInVal.value) > 0) || (fadeOutChk.checked && parseFloat(fadeOutVal.value) > 0);
-    return Boolean(gainDb || speed !== 1 || pitch || trimmed || eqTouched || fades);
+    const reverb = parseFloat(reverbEl?.value || 0) !== 0;
+    const stereo = parseFloat(stereoEl?.value || 0) !== 0;
+    return Boolean(gainDb || speed !== 1 || pitch || trimmed || eqTouched || fades || reverb || stereo);
   }
 
   applyBtn.addEventListener("click", async () => {
@@ -617,6 +724,12 @@
     pitchEl.value = 0; pitchVal.value = "0";
     fadeInChk.checked = false; fadeOutChk.checked = false;
     fadeInVal.value = 3; fadeOutVal.value = 3;
+    if (reverbEl)  { reverbEl.value = 0;  reverbVal.value = "0"; }
+    if (roomEl)    { roomEl.value = 50;   roomVal.value = "50"; }
+    if (stereoEl)  { stereoEl.value = 0;  stereoVal.value = "0"; }
+    if (reverbWet) reverbWet.gain.setValueAtTime(0, audioCtx?.currentTime || 0);
+    if (reverbDry) reverbDry.gain.setValueAtTime(1, audioCtx?.currentTime || 0);
+    if (stereoPanner) stereoPanner.pan.setValueAtTime(0, audioCtx?.currentTime || 0);
     applyEqPreset("Default");
     if (originalBuffer) {
       trimStart = 0; trimEnd = duration; cursorPos = 0;

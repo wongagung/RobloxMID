@@ -150,6 +150,8 @@
             <button class="tab-btn" data-tab="speed" title="Speed">⏱</button>
             <button class="tab-btn" data-tab="pitch" title="Pitch">〰</button>
             <button class="tab-btn" data-tab="eq" title="Equalizer">▤</button>
+            <button class="tab-btn" data-tab="reverb" title="Reverb">🌊</button>
+            <button class="tab-btn" data-tab="stereo" title="Stereo">⟺</button>
           </div>
 
           <div class="editor-visual">
@@ -204,6 +206,31 @@
           <div class="tab-panel hidden" data-panel="eq">
             <div class="eq-presets" id="eqPresets"></div>
             <div class="eq-bands" id="eqBands"></div>
+          </div>
+
+          <div class="tab-panel hidden" data-panel="reverb">
+            <label class="big-slider">
+              <span class="editor-label-row"><span>Reverb Mix</span>
+                <span class="value-input-wrap"><input id="editorReverbVal" type="number" step="1" min="0" max="100" value="0" disabled><i>%</i></span>
+              </span>
+              <input id="editorReverb" type="range" min="0" max="100" step="1" value="0" disabled>
+            </label>
+            <label class="big-slider">
+              <span class="editor-label-row"><span>Room Size</span>
+                <span class="value-input-wrap"><input id="editorRoomVal" type="number" step="1" min="0" max="100" value="50" disabled><i>%</i></span>
+              </span>
+              <input id="editorRoom" type="range" min="0" max="100" step="1" value="50" disabled>
+            </label>
+          </div>
+
+          <div class="tab-panel hidden" data-panel="stereo">
+            <label class="big-slider">
+              <span class="editor-label-row"><span>Stereo Width</span>
+                <span class="value-input-wrap"><input id="editorStereoVal" type="number" step="1" min="-100" max="100" value="0" disabled><i>%</i></span>
+              </span>
+              <input id="editorStereo" type="range" min="-100" max="100" step="1" value="0" disabled>
+            </label>
+            <p class="tab-hint">Negatif = lebih mono, Positif = lebih lebar, 0 = original</p>
           </div>
 
           <div class="editor-common">
