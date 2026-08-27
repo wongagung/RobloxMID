@@ -639,8 +639,7 @@ app.post("/api/playlist-info", express.json(), async (req, res) => {
 
   try {
     const { stdout } = await execFileAsync("yt-dlp", flags, { timeout: 60000 });
-    const lines = stdout.trim().split("
-").filter(Boolean);
+    const lines = stdout.trim().split("\n").filter(Boolean);
 
     // If only one line and no playlist_id → it's a single video, not playlist
     const items = lines.map(line => {
