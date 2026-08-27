@@ -197,7 +197,155 @@ if (playlistSelectAll) {
   };
 }
 
-// Playlist download queue
+// ── Download Queue ────────────────────────────────────────────────────────────
+let _downloadQueue = []; // { id, title, file, thumbnail, status: 'waiting'|'ready'|'uploading'|'done'|'error' }
+
+const queuePanel = $("#queuePanel");
+const queueList = $("#queueList");
+const queueEmpty = $("#queueEmpty");
+const queueClearBtn = $("#queueClearBtn");
+
+function renderQueue() {
+  if (!queueList) return;
+  if (!_downloadQueue.length) {
+    if (queuePanel) queuePanel.classList.add("hidden");
+    queueEmpty.style.display = "flex";
+    queueList.innerHTML = "";
+    return;
+  }
+  queuePanel.classList.remove("hidden");
+  queueEmpty.style.display = "none";
+  queueList.innerHTML = _downloadQueue.map((item, i) => {
+    const statusIcon = {
+      waiting:   "⏳",
+      ready:     "✏️",
+      uploading: "⬆️",
+      done:      "✓",
+      error:     "✗",
+    }[item.status] || "⏳";
+    const statusClass = `queue-item-${item.status}`;
+    return `
+      <div class="queue-item ${statusClass}" data-qi="${i}">
+        <img class="queue-thumb" src="${item.thumbnail || ""}" alt="" onerror="this.style.display='none'">
+        <div class="queue-meta">
+          <div class="queue-title">${item.title}</div>
+          <div class="queue-status-text">${
+            item.status === "waiting"   ? "Mendownload..." :
+            item.status === "ready"     ? "Siap diedit" :
+            item.status === "uploading" ? "Mengupload ke Roblox..." :
+            item.status === "done"      ? "✓ Selesai diupload" :
+            item.status === "error"     ? "✗ Gagal" : ""
+          }</div>
+        </div>
+        <div class="queue-actions">
+          ${item.status === "ready" ? `
+            <button class="ghost-btn queue-edit-btn" data-qi="${i}">✏ Edit & Upload</button>
+            <button class="primary-btn queue-upload-btn" data-qi="${i}" style="padding:7px 12px;font-size:12px;width:auto;margin:0">⬆ Upload Langsung</button>
+          ` : ""}
+          ${item.status === "error" ? `<button class="ghost-btn queue-retry-btn" data-qi="${i}">↺ Retry</button>` : ""}
+        </div>
+      </div>`;
+  }).join("");
+
+  // Wire buttons
+  queueList.querySelectorAll(".queue-edit-btn").forEach(btn => {
+    btn.onclick = () => {
+      const idx = parseInt(btn.dataset.qi);
+      const item = _downloadQueue[idx];
+      if (!item?.file) return;
+      selectFile(item.file);
+      $("#assetName").value = clampAssetName(item.title);
+      refreshUploadButton();
+      // Scroll to editor
+      document.querySelector(".upload-panel")?.scrollIntoView({ behavior: "smooth" });
+    };
+  });
+
+  queueList.querySelectorAll(".queue-upload-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const idx = parseInt(btn.dataset.qi);
+      const item = _downloadQueue[idx];
+      if (!item?.file) return;
+      item.status = "uploading";
+      renderQueue();
+      selectFile(item.file);
+      $("#assetName").value = clampAssetName(item.title);
+      refreshUploadButton();
+      await new Promise(r => setTimeout(r, 300));
+      const uploadBtn = $("#uploadBtn");
+      if (uploadBtn && !uploadBtn.disabled) {
+        uploadBtn.click();
+        item.status = "done";
+        setTimeout(renderQueue, 3000);
+      } else {
+        item.status = "error";
+        renderQueue();
+      }
+    };
+  });
+
+  queueList.querySelectorAll(".queue-retry-btn").forEach(btn => {
+    btn.onclick = () => {
+      const idx = parseInt(btn.dataset.qi);
+      const item = _downloadQueue[idx];
+      if (item) { item.status = "waiting"; downloadQueueItem(idx); }
+    };
+  });
+}
+
+if (queueClearBtn) {
+  queueClearBtn.onclick = () => {
+    _downloadQueue = _downloadQueue.filter(i => i.status === "waiting");
+    renderQueue();
+  };
+}
+
+async function downloadQueueItem(idx) {
+  const item = _downloadQueue[idx];
+  if (!item) return;
+  item.status = "waiting";
+  renderQueue();
+
+  await new Promise((resolve) => {
+    const evtSrc = new EventSource(`/api/fetch-url-stream?url=${encodeURIComponent(item.url)}`);
+
+    evtSrc.addEventListener("progress", e => {
+      const d = JSON.parse(e.data);
+      // Update progress in playlist card too
+      if (d.percent !== undefined && playlistProgText) {
+        playlistProgText.textContent = `${item.title}: ${Math.round(d.percent)}%`;
+      }
+    });
+
+    evtSrc.addEventListener("file", e => {
+      evtSrc.close();
+      const d = JSON.parse(e.data);
+      const bytes = Uint8Array.from(atob(d.data), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: d.mimeType });
+      item.file = new File([blob], `${d.title}.mp3`, { type: d.mimeType });
+      item.status = "ready";
+      renderQueue();
+      resolve();
+    });
+
+    evtSrc.addEventListener("error", e => {
+      evtSrc.close();
+      item.status = "error";
+      renderQueue();
+      resolve();
+    });
+
+    evtSrc.onerror = () => {
+      if (evtSrc.readyState === EventSource.CLOSED) return;
+      evtSrc.close();
+      item.status = "error";
+      renderQueue();
+      resolve();
+    };
+  });
+}
+
+// Playlist download queue — download to local queue, not direct upload
 if (playlistDownloadBtn) {
   playlistDownloadBtn.onclick = async () => {
     const selected = _playlistItems.filter(item => _selectedIds.has(item.id));
@@ -207,70 +355,43 @@ if (playlistDownloadBtn) {
     playlistSelectAll.disabled = true;
     playlistProgress.classList.remove("hidden");
 
-    let done = 0;
     const total = selected.length;
 
-    for (const item of selected) {
-      playlistProgText.textContent = `Mendownload ${done + 1}/${total}: ${item.title}`;
-      playlistProgBar.style.width = (done / total * 100) + "%";
+    // Add all to queue first
+    const startIdx = _downloadQueue.length;
+    selected.forEach(item => {
+      _downloadQueue.push({
+        id: item.id,
+        title: item.title,
+        thumbnail: item.thumbnail,
+        url: item.webpage_url,
+        file: null,
+        status: "waiting",
+      });
+    });
+    renderQueue();
 
-      // Mark item as downloading
-      const label = playlistItems.querySelector(`[data-idx="${_playlistItems.indexOf(item)}"]`);
+    // Download one by one
+    for (let i = 0; i < selected.length; i++) {
+      const qIdx = startIdx + i;
+      playlistProgText.textContent = `Mendownload ${i + 1}/${total}: ${selected[i].title}`;
+      playlistProgBar.style.width = (i / total * 100) + "%";
+
+      const label = playlistItems.querySelector(`[data-idx="${_playlistItems.indexOf(selected[i])}"]`);
       if (label) label.classList.add("pl-downloading");
 
-      try {
-        await new Promise((resolve, reject) => {
-          const evtSrc = new EventSource(`/api/fetch-url-stream?url=${encodeURIComponent(item.webpage_url)}`);
+      await downloadQueueItem(qIdx);
 
-          evtSrc.addEventListener("progress", e => {
-            const d = JSON.parse(e.data);
-            if (d.percent !== undefined) {
-              playlistProgText.textContent = `Mendownload ${done + 1}/${total}: ${item.title} (${Math.round(d.percent)}%)`;
-            }
-          });
+      if (label) {
+        label.classList.remove("pl-downloading");
+        label.classList.add(_downloadQueue[qIdx].status === "ready" ? "pl-done" : "pl-error");
+      }
 
-          evtSrc.addEventListener("file", e => {
-            evtSrc.close();
-            const d = JSON.parse(e.data);
-            const bytes = Uint8Array.from(atob(d.data), c => c.charCodeAt(0));
-            const blob = new Blob([bytes], { type: d.mimeType });
-            const file = new File([blob], `${d.title}.mp3`, { type: d.mimeType });
-            // Auto-upload to Roblox with track name
-            const assetName = clampAssetName(d.title);
-            selectFile(file);
-            $("#assetName").value = assetName;
-            refreshUploadButton();
-            // Trigger upload
-            setTimeout(() => {
-              const uploadBtn = $("#uploadBtn");
-              if (uploadBtn && !uploadBtn.disabled) uploadBtn.click();
-            }, 500);
-            if (label) { label.classList.remove("pl-downloading"); label.classList.add("pl-done"); }
-            resolve();
-          });
-
-          evtSrc.addEventListener("error", e => {
-            evtSrc.close();
-            if (label) label.classList.add("pl-error");
-            resolve(); // continue queue even if one fails
-          });
-
-          evtSrc.onerror = () => {
-            if (evtSrc.readyState === EventSource.CLOSED) return;
-            evtSrc.close();
-            if (label) label.classList.add("pl-error");
-            resolve();
-          };
-        });
-      } catch { /* continue */ }
-
-      done++;
-      // Small delay between tracks to avoid hammering
-      await new Promise(r => setTimeout(r, 1500));
+      await new Promise(r => setTimeout(r, 800));
     }
 
     playlistProgBar.style.width = "100%";
-    playlistProgText.textContent = `✓ Selesai! ${done} track didownload.`;
+    playlistProgText.textContent = `✓ ${selected.length} track masuk antrian — edit & upload satu per satu!`;
     playlistDownloadBtn.disabled = false;
     playlistSelectAll.disabled = false;
   };
