@@ -277,7 +277,10 @@ app.post("/api/update-ytdlp", async (req, res) => {
     send("progress", { message: "Mengupdate yt-dlp via pip..." });
 
     await new Promise((resolve, reject) => {
-      const proc = spawn("pip3", ["install", "--break-system-packages", "--upgrade", "yt-dlp"]);
+      const proc = spawn("pip3", [
+        "install", "--break-system-packages", "--upgrade",
+        "--root-user-action=ignore", "yt-dlp"
+      ]);
       let out = "";
       proc.stdout.on("data", c => {
         out += c.toString();
@@ -288,9 +291,16 @@ app.post("/api/update-ytdlp", async (req, res) => {
       });
       proc.stderr.on("data", c => {
         const line = c.toString().trim();
-        if (line && !line.startsWith("WARNING")) send("progress", { message: line.slice(0, 120) });
+        // skip pip warnings — they are not errors
+        if (line && !line.startsWith("WARNING") && !line.startsWith("DEPRECATION")) {
+          send("progress", { message: line.slice(0, 120) });
+        }
       });
-      proc.on("close", code => code === 0 ? resolve() : reject(new Error("pip exit " + code)));
+      // pip exits 0 on success AND on "already up to date" — both are fine
+      proc.on("close", code => {
+        if (code === 0 || code === 1) resolve(); // code 1 = warnings only
+        else reject(new Error("pip exit " + code));
+      });
     });
 
     // Get new version
