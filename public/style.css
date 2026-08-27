@@ -722,3 +722,28 @@ body.light{--bg:#f5f7fb;--panel:rgba(255,255,255,.84);--line:rgba(15,23,42,.1);-
 }
 .vary-on  { background: #05966918; border-color: #05966944; color: #6ee7b7; }
 .vary-off { background: #ef444418; border-color: #ef444444; color: #fca5a5; }
+
+/* ── Asset buttons ──────────────────────────────────────────────────────── */
+.asset-btns {
+  display: flex;
+  gap: 5px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.asset-link-btn {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid #8b5cf633;
+  background: #8b5cf610;
+  color: #c4b5fd;
+  font-size: 11px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: all .15s;
+  cursor: pointer;
+}
+.asset-link-btn:hover {
+  background: #8b5cf622;
+  border-color: #8b5cf655;
+}

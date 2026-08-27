@@ -325,7 +325,10 @@
     <section class="panel library-panel">
       <div class="panel-head">
         <div><h2>Recent tracks</h2><p>Your latest uploads and asset IDs</p></div>
-        <button id="refreshBtn" class="ghost-btn">↻ Refresh</button>
+        <div style="display:flex;gap:6px">
+          <a id="exportCsvBtn" href="/api/history/export/csv" download class="ghost-btn" title="Export ke CSV">⬇ CSV</a>
+          <button id="refreshBtn" class="ghost-btn">↻ Refresh</button>
+        </div>
       </div>
       <!-- Filter & Search bar -->
       <div class="library-controls">

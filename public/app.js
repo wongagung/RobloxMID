@@ -634,7 +634,14 @@ function _renderItems(items) {
         <span class="chip ${statusClass(item.telegram?.status)}">T ${statusLabel(item.telegram?.status)}</span>
         ${item.conversion?.status && item.conversion.status !== "not_needed" ? `<span class="chip ${statusClass(item.conversion?.status)}">↻ ${statusLabel(item.conversion?.status)}</span>` : ""}
       </div>
-      <div class="asset-id">${rid ? `<b>${rid}</b>${moderation === "reviewing" ? `<button onclick="recheckModeration('${item.id}')">Recheck</button>` : ""}<button onclick="copyText('${sound}')">Copy</button>` : `<span>${item.roblox?.error || "Waiting..."}</span>`}</div>
+      <div class="asset-id">${rid ? `
+        <b>${rid}</b>
+        <div class="asset-btns">
+          <button onclick="copyText('${sound}')">Copy ID</button>
+          ${moderation === "approved" ? `<a href="https://create.roblox.com/store/asset/${rid}" target="_blank" rel="noopener" class="asset-link-btn">🔗 Creator</a>` : ""}
+          ${moderation === "reviewing" ? `<button onclick="recheckModeration('${item.id}')">Recheck</button>` : ""}
+        </div>
+      ` : `<span>${item.roblox?.error || "Waiting..."}</span>`}</div>
     </article>`;
   }).join("");
 }

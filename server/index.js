@@ -460,6 +460,29 @@ app.post("/api/roblox/moderation/:id/refresh", async (req, res) => {
   }
 });
 
+// ── Export history as CSV ─────────────────────────────────────────────────────
+app.get("/api/history/export/csv", (_, res) => {
+  const history = readHistory();
+  const rows = [
+    ["Name", "Asset ID", "Status", "Roblox URL", "Original File", "Uploaded At"].join(","),
+    ...history.map(item => {
+      const assetId = item.roblox?.assetId || "";
+      const status  = item.roblox?.moderation || item.roblox?.status || "";
+      const url     = assetId ? `https://create.roblox.com/store/asset/${assetId}` : "";
+      const name    = `"${(item.name || "").replace(/"/g, '""')}"`;
+      const orig    = `"${(item.originalName || "").replace(/"/g, '""')}"`;
+      const date    = item.uploadedAt ? new Date(item.uploadedAt).toISOString() : "";
+      return [name, assetId, status, url, orig, date].join(",");
+    })
+  ].join("
+");
+
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader("Content-Disposition", `attachment; filename="roblox-assets-${Date.now()}.csv"`);
+  res.send("﻿" + rows); // BOM for Excel UTF-8 compatibility
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 app.get("/api/history/:id", (req, res) => {
   const item = readHistory().find(x => x.id === req.params.id);
   if (!item) return res.status(404).json({ error: "Item tidak ditemukan." });
