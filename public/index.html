@@ -246,7 +246,21 @@
         <div><h2>Recent tracks</h2><p>Your latest uploads and asset IDs</p></div>
         <button id="refreshBtn" class="ghost-btn">↻ Refresh</button>
       </div>
+      <!-- Filter & Search bar -->
+      <div class="library-controls">
+        <div class="lib-search-wrap">
+          <span class="lib-search-icon">⌕</span>
+          <input id="libSearch" type="search" placeholder="Cari nama track..." autocomplete="off">
+        </div>
+        <div class="lib-filters">
+          <button class="lib-filter active" data-filter="all">Semua</button>
+          <button class="lib-filter" data-filter="approved">✓ Approved</button>
+          <button class="lib-filter" data-filter="rejected">✕ Rejected</button>
+          <button class="lib-filter" data-filter="reviewing">🛡 Review</button>
+        </div>
+      </div>
       <div id="empty" class="empty"><span>♫</span><h3>No tracks yet</h3><p>Upload your first track to start building your library.</p></div>
+      <div id="libEmpty2" class="empty hidden"><span>🔍</span><h3>Tidak ada hasil</h3><p>Coba ubah filter atau kata kunci pencarian.</p></div>
       <div id="library" class="library"></div>
     </section>
   </main>

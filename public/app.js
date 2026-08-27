@@ -331,7 +331,12 @@ function statusLabel(status) {
 }
 
 function renderHistory(items) {
-  $("#heroCount").textContent = items.length;
+  _allItems = items;
+  $("#heroCount").textContent = items.filter(i => i.roblox?.moderation === "approved").length;
+  applyLibraryFilter();
+}
+
+function _renderItems(items) {
   const lib = $("#library"), empty = $("#empty");
   if (!items.length) { empty.style.display="flex"; lib.innerHTML=""; return; }
   empty.style.display="none";
@@ -356,6 +361,62 @@ function renderHistory(items) {
     </article>`;
   }).join("");
 }
+
+// ── Library filter state & logic ─────────────────────────────────────────────
+let _allItems = [];
+let _activeFilter = "all";
+let _searchQuery = "";
+
+document.querySelectorAll(".lib-filter").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".lib-filter").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    _activeFilter = btn.dataset.filter;
+    applyLibraryFilter();
+  });
+});
+
+const libSearch = $("#libSearch");
+if (libSearch) {
+  libSearch.addEventListener("input", () => {
+    _searchQuery = libSearch.value.trim().toLowerCase();
+    applyLibraryFilter();
+  });
+}
+
+function applyLibraryFilter() {
+  const lib = $("#library");
+  const empty = $("#empty");
+  const empty2 = $("#libEmpty2");
+
+  if (!_allItems.length) {
+    empty.style.display = "flex";
+    if (empty2) empty2.classList.add("hidden");
+    lib.innerHTML = "";
+    return;
+  }
+  empty.style.display = "none";
+
+  let filtered = _allItems;
+  if (_activeFilter !== "all") {
+    filtered = filtered.filter(i => (i.roblox?.moderation || "") === _activeFilter);
+  }
+  if (_searchQuery) {
+    filtered = filtered.filter(i =>
+      (i.name || "").toLowerCase().includes(_searchQuery) ||
+      (i.originalName || "").toLowerCase().includes(_searchQuery)
+    );
+  }
+
+  if (!filtered.length) {
+    if (empty2) empty2.classList.remove("hidden");
+    lib.innerHTML = "";
+    return;
+  }
+  if (empty2) empty2.classList.add("hidden");
+  _renderItems(filtered);
+}
+
 window.recheckModeration = async id => {
   try {
     const r = await api(`/api/roblox/moderation/${id}/refresh`, { method: "POST" });

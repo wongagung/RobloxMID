@@ -372,3 +372,84 @@ body.light{--bg:#f5f7fb;--panel:rgba(255,255,255,.84);--line:rgba(15,23,42,.1);-
 .update-log .update-success { color: #34d399; font-weight: 700; }
 .update-log .update-info    { color: #60a5fa; }
 .update-log .update-error   { color: #f87171; font-weight: 700; }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   LIBRARY CONTROLS — filter & search
+   ═══════════════════════════════════════════════════════════════════════════ */
+.library-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 0 0 14px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+
+/* Search */
+.lib-search-wrap {
+  position: relative;
+  width: 100%;
+}
+.lib-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--muted);
+  font-size: 16px;
+  pointer-events: none;
+}
+#libSearch {
+  width: 100%;
+  padding: 9px 12px 9px 36px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #080b13;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color .18s;
+  box-sizing: border-box;
+}
+#libSearch:focus { border-color: #8b5cf666; }
+#libSearch::placeholder { color: #3d4558; }
+
+/* Filter pills */
+.lib-filters {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.lib-filter {
+  padding: 5px 12px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all .15s;
+  white-space: nowrap;
+}
+.lib-filter:hover { border-color: #8b5cf644; color: var(--text); }
+.lib-filter.active {
+  background: #8b5cf618;
+  border-color: #8b5cf644;
+  color: #c4b5fd;
+}
+.lib-filter[data-filter="approved"].active {
+  background: #05966918;
+  border-color: #05966944;
+  color: #6ee7b7;
+}
+.lib-filter[data-filter="rejected"].active {
+  background: #ef444418;
+  border-color: #ef444444;
+  color: #fca5a5;
+}
+.lib-filter[data-filter="reviewing"].active {
+  background: #f59e0b18;
+  border-color: #f59e0b44;
+  color: #fcd34d;
+}
