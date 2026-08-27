@@ -227,8 +227,16 @@
           <div class="service-logo tg">✈</div><div><strong>Telegram</strong><span id="telegramText">Checking...</span></div><i class="dot"></i>
         </div>
         <div class="service" id="ytdlpService">
-          <div class="service-logo yt">▶</div><div><strong>yt-dlp (URL source)</strong><span id="ytdlpText">Checking...</span></div><i class="dot"></i>
+          <div class="service-logo yt">▶</div>
+          <div style="flex:1">
+            <strong>yt-dlp (URL source)</strong>
+            <span id="ytdlpText">Checking...</span>
+          </div>
+          <button id="ytdlpUpdateBtn" class="icon-btn" title="Update yt-dlp" style="display:none">↑</button>
+          <i class="dot"></i>
         </div>
+        <!-- Update log -->
+        <div id="ytdlpUpdateLog" class="update-log hidden"></div>
         <div class="tip"><b>Storage</b><p>File di server hanya sementara. Setelah diproses, file lokal otomatis dihapus. Telegram menjadi penyimpanan salinan audio.</p></div>
       </aside>
     </section>

@@ -233,16 +233,88 @@ cleanupOldUploads();
 setInterval(cleanupOldUploads, 15 * 60 * 1000).unref();
 
 app.get("/api/config", async (_, res) => {
+  let ytdlpVersion = null;
+  try {
+    const { stdout } = await execFileAsync("yt-dlp", ["--version"], { timeout: 5000 });
+    ytdlpVersion = stdout.trim();
+  } catch {}
   res.json({
     maxFileSizeMb: MAX_MB,
     cleanupMinutes: CLEANUP_MINUTES,
     supportedFormats: ["MP3", "WAV", "OGG", "FLAC"],
     autoConvert: true,
-    ytdlpAvailable: await execFileAsync("yt-dlp", ["--version"], { timeout: 5000 }).then(() => true).catch(() => false),
+    ytdlpAvailable: Boolean(ytdlpVersion),
+    ytdlpVersion,
     robloxConfigured: Boolean(process.env.ROBLOX_API_KEY && process.env.ROBLOX_USER_ID),
     telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID)
   });
 });
+
+// ── Update yt-dlp ─────────────────────────────────────────────────────────────
+let ytdlpUpdateRunning = false;
+
+app.post("/api/update-ytdlp", async (req, res) => {
+  if (ytdlpUpdateRunning) {
+    return res.status(409).json({ error: "Update sedang berjalan." });
+  }
+  ytdlpUpdateRunning = true;
+
+  // SSE
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no");
+  res.flushHeaders();
+
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+
+  try {
+    // Get current version
+    const { stdout: before } = await execFileAsync("yt-dlp", ["--version"], { timeout: 5000 });
+    send("progress", { message: `Versi saat ini: ${before.trim()}` });
+
+    // Run pip install -U yt-dlp
+    send("progress", { message: "Mengupdate yt-dlp via pip..." });
+
+    await new Promise((resolve, reject) => {
+      const proc = spawn("pip3", ["install", "--break-system-packages", "--upgrade", "yt-dlp"]);
+      let out = "";
+      proc.stdout.on("data", c => {
+        out += c.toString();
+        const lines = out.split("\n");
+        const last = lines.filter(l => l.trim()).pop() || "";
+        if (last) send("progress", { message: last.slice(0, 120) });
+        out = lines[lines.length - 1];
+      });
+      proc.stderr.on("data", c => {
+        const line = c.toString().trim();
+        if (line && !line.startsWith("WARNING")) send("progress", { message: line.slice(0, 120) });
+      });
+      proc.on("close", code => code === 0 ? resolve() : reject(new Error("pip exit " + code)));
+    });
+
+    // Get new version
+    const { stdout: after } = await execFileAsync("yt-dlp", ["--version"], { timeout: 5000 });
+    const newVer = after.trim();
+    const oldVer = before.trim();
+    const updated = newVer !== oldVer;
+
+    send("done", {
+      message: updated
+        ? `Update berhasil! ${oldVer} → ${newVer}`
+        : `Sudah versi terbaru: ${newVer}`,
+      oldVersion: oldVer,
+      newVersion: newVer,
+      updated,
+    });
+  } catch (err) {
+    send("error", { message: "Gagal update: " + (err.message || "unknown error") });
+  }
+
+  ytdlpUpdateRunning = false;
+  res.end();
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.get("/api/history", (_, res) => {
   res.json(readHistory());

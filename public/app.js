@@ -428,6 +428,65 @@ $("#themeBtn").onclick = () => {
 };
 if (localStorage.theme === "light") document.body.classList.add("light");
 
+// ── yt-dlp update ────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = $("#ytdlpUpdateBtn");
+  const log = $("#ytdlpUpdateLog");
+  if (!btn) return;
+
+  btn.onclick = () => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    log.classList.remove("hidden");
+    log.innerHTML = "";
+
+    const addLine = (text, cls = "") => {
+      const p = document.createElement("p");
+      p.textContent = text;
+      if (cls) p.className = cls;
+      log.appendChild(p);
+      log.scrollTop = log.scrollHeight;
+    };
+
+    addLine("Memulai update yt-dlp...");
+
+    const evtSrc = new EventSource("/api/update-ytdlp");
+
+    evtSrc.addEventListener("progress", e => {
+      const d = JSON.parse(e.data);
+      addLine(d.message);
+    });
+
+    evtSrc.addEventListener("done", e => {
+      evtSrc.close();
+      const d = JSON.parse(e.data);
+      addLine(d.message, d.updated ? "update-success" : "update-info");
+      btn.disabled = false;
+      btn.title = "Update yt-dlp";
+      // Refresh version display
+      fetch("/api/config").then(r => r.json()).then(cfg => {
+        const ytVer = cfg.ytdlpVersion || "";
+        $("#ytdlpText").textContent = `Tersedia${ytVer ? " · v" + ytVer : ""} — URL source aktif`;
+      });
+    });
+
+    evtSrc.addEventListener("error", e => {
+      evtSrc.close();
+      let msg = "Gagal update.";
+      try { msg = JSON.parse(e.data).message; } catch {}
+      addLine(msg, "update-error");
+      btn.disabled = false;
+    });
+
+    evtSrc.onerror = () => {
+      if (evtSrc.readyState === EventSource.CLOSED) return;
+      evtSrc.close();
+      addLine("Koneksi terputus.", "update-error");
+      btn.disabled = false;
+    };
+  };
+});
+
 // Show logout button only when auth cookie is present
 if (document.cookie.includes("_auth")) {
   $("#logoutBtn").classList.remove("hidden");
@@ -457,10 +516,14 @@ $("#logoutBtn").onclick = async () => {
     $("#limitLabel").textContent = `Max ${cfg.maxFileSizeMb} MB`;
     $("#robloxText").textContent = cfg.robloxConfigured ? "API key configured" : "Not configured";
     $("#telegramText").textContent = cfg.telegramConfigured ? "Bot configured" : "Not configured";
-    $("#ytdlpText").textContent = cfg.ytdlpAvailable ? "Tersedia — URL source aktif" : "Tidak tersedia — install: pip install yt-dlp";
+    const ytVer = cfg.ytdlpVersion || "";
+    $("#ytdlpText").textContent = cfg.ytdlpAvailable
+      ? `Tersedia${ytVer ? " · v" + ytVer : ""} — URL source aktif`
+      : "Tidak tersedia — install: pip install yt-dlp";
     $("#robloxService").classList.toggle("off", !cfg.robloxConfigured);
     $("#telegramService").classList.toggle("off", !cfg.telegramConfigured);
     $("#ytdlpService").classList.toggle("off", !cfg.ytdlpAvailable);
+    if (cfg.ytdlpAvailable) $("#ytdlpUpdateBtn").style.display = "";
     $("#serverBadge").innerHTML = "<i></i> Online";
   } catch {
     $("#serverBadge").innerHTML = "<i></i> Offline";
