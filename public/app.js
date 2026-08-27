@@ -332,7 +332,9 @@ function statusLabel(status) {
 
 function renderHistory(items) {
   _allItems = items;
-  $("#heroCount").textContent = items.filter(i => i.roblox?.moderation === "approved").length;
+  $("#heroApproved").textContent  = items.filter(i => i.roblox?.moderation === "approved").length;
+  $("#heroRejected").textContent  = items.filter(i => i.roblox?.moderation === "rejected").length;
+  $("#heroReviewing").textContent = items.filter(i => i.roblox?.moderation === "reviewing").length;
   applyLibraryFilter();
 }
 
@@ -388,7 +390,6 @@ function applyLibraryFilter() {
   const lib = $("#library");
   const empty = $("#empty");
   const empty2 = $("#libEmpty2");
-
   if (!_allItems.length) {
     empty.style.display = "flex";
     if (empty2) empty2.classList.add("hidden");
