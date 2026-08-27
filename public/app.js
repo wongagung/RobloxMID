@@ -131,16 +131,163 @@ urlInput.addEventListener("input", () => {
 });
 urlInfoBtn.disabled = true;
 
-// Step 1: Cek Info
+// ── Playlist state ───────────────────────────────────────────────────────────
+let _playlistItems = [];
+let _selectedIds = new Set();
+
+const playlistCard = $("#playlistCard");
+const playlistItems = $("#playlistItems");
+const playlistTitle = $("#playlistTitle");
+const playlistMeta = $("#playlistMeta");
+const playlistDownloadBtn = $("#playlistDownloadBtn");
+const playlistSelectAll = $("#playlistSelectAll");
+const playlistProgress = $("#playlistProgress");
+const playlistProgBar = $("#playlistProgBar");
+const playlistProgText = $("#playlistProgText");
+
+function resetPlaylist() {
+  _playlistItems = [];
+  _selectedIds.clear();
+  if (playlistCard) playlistCard.classList.add("hidden");
+  if (playlistItems) playlistItems.innerHTML = "";
+  if (playlistProgress) playlistProgress.classList.add("hidden");
+}
+
+function renderPlaylistItems(items) {
+  playlistItems.innerHTML = items.map((item, i) => `
+    <label class="playlist-item" data-idx="${i}">
+      <input type="checkbox" class="pl-check" data-id="${item.id}" checked>
+      <img class="pl-thumb" src="${item.thumbnail || ""}" alt="" onerror="this.style.display='none'">
+      <div class="pl-meta">
+        <div class="pl-title">${item.title}</div>
+        <div class="pl-sub">${item.uploader || ""}${item.duration_string ? " · ⏱ " + item.duration_string : ""}</div>
+      </div>
+    </label>
+  `).join("");
+
+  // Wire checkboxes
+  playlistItems.querySelectorAll(".pl-check").forEach(chk => {
+    _selectedIds.add(chk.dataset.id);
+    chk.addEventListener("change", () => {
+      if (chk.checked) _selectedIds.add(chk.dataset.id);
+      else _selectedIds.delete(chk.dataset.id);
+      updatePlaylistDownloadBtn();
+    });
+  });
+  updatePlaylistDownloadBtn();
+}
+
+function updatePlaylistDownloadBtn() {
+  if (!playlistDownloadBtn) return;
+  const n = _selectedIds.size;
+  playlistDownloadBtn.disabled = n === 0;
+  playlistDownloadBtn.textContent = n > 0 ? `⬇ Download ${n} Track` : "⬇ Download Terpilih";
+}
+
+if (playlistSelectAll) {
+  playlistSelectAll.onclick = () => {
+    const checks = playlistItems.querySelectorAll(".pl-check");
+    const allChecked = [...checks].every(c => c.checked);
+    checks.forEach(c => {
+      c.checked = !allChecked;
+      if (c.checked) _selectedIds.add(c.dataset.id);
+      else _selectedIds.delete(c.dataset.id);
+    });
+    updatePlaylistDownloadBtn();
+  };
+}
+
+// Playlist download queue
+if (playlistDownloadBtn) {
+  playlistDownloadBtn.onclick = async () => {
+    const selected = _playlistItems.filter(item => _selectedIds.has(item.id));
+    if (!selected.length) return;
+
+    playlistDownloadBtn.disabled = true;
+    playlistSelectAll.disabled = true;
+    playlistProgress.classList.remove("hidden");
+
+    let done = 0;
+    const total = selected.length;
+
+    for (const item of selected) {
+      playlistProgText.textContent = `Mendownload ${done + 1}/${total}: ${item.title}`;
+      playlistProgBar.style.width = (done / total * 100) + "%";
+
+      // Mark item as downloading
+      const label = playlistItems.querySelector(`[data-idx="${_playlistItems.indexOf(item)}"]`);
+      if (label) label.classList.add("pl-downloading");
+
+      try {
+        await new Promise((resolve, reject) => {
+          const evtSrc = new EventSource(`/api/fetch-url-stream?url=${encodeURIComponent(item.webpage_url)}`);
+
+          evtSrc.addEventListener("progress", e => {
+            const d = JSON.parse(e.data);
+            if (d.percent !== undefined) {
+              playlistProgText.textContent = `Mendownload ${done + 1}/${total}: ${item.title} (${Math.round(d.percent)}%)`;
+            }
+          });
+
+          evtSrc.addEventListener("file", e => {
+            evtSrc.close();
+            const d = JSON.parse(e.data);
+            const bytes = Uint8Array.from(atob(d.data), c => c.charCodeAt(0));
+            const blob = new Blob([bytes], { type: d.mimeType });
+            const file = new File([blob], `${d.title}.mp3`, { type: d.mimeType });
+            // Auto-upload to Roblox with track name
+            const assetName = clampAssetName(d.title);
+            selectFile(file);
+            $("#assetName").value = assetName;
+            refreshUploadButton();
+            // Trigger upload
+            setTimeout(() => {
+              const uploadBtn = $("#uploadBtn");
+              if (uploadBtn && !uploadBtn.disabled) uploadBtn.click();
+            }, 500);
+            if (label) { label.classList.remove("pl-downloading"); label.classList.add("pl-done"); }
+            resolve();
+          });
+
+          evtSrc.addEventListener("error", e => {
+            evtSrc.close();
+            if (label) label.classList.add("pl-error");
+            resolve(); // continue queue even if one fails
+          });
+
+          evtSrc.onerror = () => {
+            if (evtSrc.readyState === EventSource.CLOSED) return;
+            evtSrc.close();
+            if (label) label.classList.add("pl-error");
+            resolve();
+          };
+        });
+      } catch { /* continue */ }
+
+      done++;
+      // Small delay between tracks to avoid hammering
+      await new Promise(r => setTimeout(r, 1500));
+    }
+
+    playlistProgBar.style.width = "100%";
+    playlistProgText.textContent = `✓ Selesai! ${done} track didownload.`;
+    playlistDownloadBtn.disabled = false;
+    playlistSelectAll.disabled = false;
+  };
+}
+
+// Step 1: Cek Info — detect playlist vs single
 urlInfoBtn.onclick = async () => {
   const url = urlInput.value.trim();
   if (!url) return;
   urlInfoBtn.disabled = true;
   resetPreview();
+  resetPlaylist();
   setUrlStatus("⏳ Mengambil info...");
 
   try {
-    const resp = await fetch("/api/url-info", {
+    // Try playlist first
+    const resp = await fetch("/api/playlist-info", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url })
@@ -148,20 +295,27 @@ urlInfoBtn.onclick = async () => {
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error || "Gagal mengambil info.");
 
-    // Populate preview card
-    const thumb = $("#urlThumb");
-    if (data.thumbnail) {
-      thumb.src = data.thumbnail;
-      thumb.classList.remove("hidden");
+    if (data.isPlaylist && data.items.length > 1) {
+      // Show playlist UI
+      _playlistItems = data.items;
+      playlistTitle.textContent = data.playlistTitle || "Playlist";
+      playlistMeta.textContent = `${data.total} track${data.limited ? " (max 50 ditampilkan)" : ""}`;
+      renderPlaylistItems(data.items);
+      playlistCard.classList.remove("hidden");
+      clearUrlStatus();
     } else {
-      thumb.classList.add("hidden");
+      // Single video — show normal preview card
+      const item = data.items[0];
+      const thumb = $("#urlThumb");
+      if (item.thumbnail) { thumb.src = item.thumbnail; thumb.classList.remove("hidden"); }
+      else thumb.classList.add("hidden");
+      $("#urlTitle").textContent = item.title;
+      $("#urlUploader").textContent = item.uploader || "";
+      $("#urlDuration").textContent = item.duration_string ? `⏱ ${item.duration_string}` : "";
+      urlPreviewCard.classList.remove("hidden");
+      urlFetchBtn.disabled = false;
+      clearUrlStatus();
     }
-    $("#urlTitle").textContent = data.title;
-    $("#urlUploader").textContent = data.uploader || "";
-    $("#urlDuration").textContent = data.duration_string ? `⏱ ${data.duration_string}` : "";
-    urlPreviewCard.classList.remove("hidden");
-    urlFetchBtn.disabled = false;
-    clearUrlStatus();
   } catch (err) {
     setUrlStatus("✗ " + (err.message || "Gagal mengambil info."), true);
   }

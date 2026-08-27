@@ -608,6 +608,79 @@ app.post("/api/url-info", express.json(), async (req, res) => {
 });
 // ────────────────────────────────────────────────────────────────────────────
 
+// ── Playlist info ────────────────────────────────────────────────────────────
+const PLAYLIST_LIMIT = 50;
+
+app.post("/api/playlist-info", express.json(), async (req, res) => {
+  const { url } = req.body || {};
+  if (!url || typeof url !== "string") return res.status(400).json({ error: "URL tidak valid." });
+
+  let parsed;
+  try { parsed = new URL(url); } catch {
+    return res.status(400).json({ error: "URL tidak dapat diparse." });
+  }
+  if (!["http:", "https:"].includes(parsed.protocol)) {
+    return res.status(400).json({ error: "Hanya URL http/https yang didukung." });
+  }
+
+  const nodePath = process.execPath;
+  const cookiesPath = path.join(root, "cookies.txt");
+  const hasCookies = fs.existsSync(cookiesPath) && fs.statSync(cookiesPath).size > 0;
+
+  const flags = [
+    "--js-runtimes", `node:${nodePath}`,
+    "--remote-components", "ejs:github",
+    "--flat-playlist",           // don't recurse into sub-playlists
+    "--playlist-end", String(PLAYLIST_LIMIT),
+    "--dump-json",
+    ...(hasCookies ? ["--cookies", cookiesPath] : []),
+    url,
+  ];
+
+  try {
+    const { stdout } = await execFileAsync("yt-dlp", flags, { timeout: 60000 });
+    const lines = stdout.trim().split("
+").filter(Boolean);
+
+    // If only one line and no playlist_id → it's a single video, not playlist
+    const items = lines.map(line => {
+      try {
+        const info = JSON.parse(line);
+        return {
+          id: info.id,
+          title: (info.title || info.fulltitle || "Unknown").slice(0, 100),
+          duration: info.duration || 0,
+          duration_string: info.duration_string || "",
+          thumbnail: info.thumbnail || null,
+          uploader: info.uploader || info.channel || "",
+          webpage_url: info.webpage_url || info.url || url,
+          playlist_title: info.playlist_title || info.playlist || null,
+        };
+      } catch { return null; }
+    }).filter(Boolean);
+
+    if (!items.length) {
+      return res.status(404).json({ error: "Tidak ada track ditemukan di playlist ini." });
+    }
+
+    const isPlaylist = items.length > 1 || items[0]?.playlist_title;
+    res.json({
+      isPlaylist,
+      playlistTitle: items[0]?.playlist_title || null,
+      total: items.length,
+      limited: items.length >= PLAYLIST_LIMIT,
+      items,
+    });
+  } catch (err) {
+    const msg = err.message || "";
+    if (msg.includes("Sign in") || msg.includes("bot")) {
+      return res.status(403).json({ error: "YouTube meminta login. Upload cookies.txt terbaru." });
+    }
+    res.status(502).json({ error: "Gagal mengambil info playlist. Pastikan URL valid." });
+  }
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 // ── SSE streaming download ───────────────────────────────────────────────────
 app.get("/api/fetch-url-stream", async (req, res) => {
   const url = req.query.url;

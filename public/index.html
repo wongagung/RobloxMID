@@ -90,7 +90,7 @@
             <div id="urlStatus" class="url-status hidden">
               <span id="urlStatusText">Mendownload...</span>
             </div>
-            <!-- Metadata preview card -->
+            <!-- Metadata preview card (single video) -->
             <div id="urlPreviewCard" class="url-preview hidden">
               <img id="urlThumb" src="" alt="" class="url-thumb">
               <div class="url-meta">
@@ -99,6 +99,27 @@
                 <div id="urlDuration" class="url-meta-sub"></div>
               </div>
               <button id="urlFetchBtn" class="primary-btn url-dl-btn">⬇ Download & Pakai</button>
+            </div>
+
+            <!-- Playlist preview -->
+            <div id="playlistCard" class="playlist-card hidden">
+              <div class="playlist-head">
+                <div>
+                  <div id="playlistTitle" class="playlist-title"></div>
+                  <div id="playlistMeta" class="playlist-meta"></div>
+                </div>
+                <div class="playlist-actions">
+                  <button id="playlistSelectAll" class="ghost-btn">Pilih Semua</button>
+                  <button id="playlistDownloadBtn" class="primary-btn" disabled>⬇ Download Terpilih</button>
+                </div>
+              </div>
+              <div id="playlistItems" class="playlist-items"></div>
+              <div id="playlistProgress" class="playlist-progress hidden">
+                <div class="playlist-prog-bar-wrap">
+                  <div id="playlistProgBar" class="playlist-prog-bar" style="width:0%"></div>
+                </div>
+                <div id="playlistProgText" class="playlist-prog-text"></div>
+              </div>
             </div>
             <!-- Cookies upload -->
             <details class="cookies-details">
