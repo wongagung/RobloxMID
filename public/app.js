@@ -622,11 +622,22 @@ function _renderItems(items) {
     const sound = rid ? `rbxassetid://${rid}` : "";
     const moderation = item.roblox?.moderation;
     const modIcon = { approved: "✓", rejected: "✕", reviewing: "🛡" }[moderation] || "🛡";
+    // Build editor meta badge
+    const m = item.editorMeta;
+    const metaBadges = m ? [
+      m.pitch  !== 0             ? `Pitch ${m.pitch > 0 ? "+" : ""}${m.pitch} st` : null,
+      m.speed  !== 1             ? `Speed ${m.speed}x` : null,
+      m.volume !== 0             ? `Vol ${m.volume > 0 ? "+" : ""}${m.volume} dB` : null,
+      m.reverb > 0               ? `Reverb ${m.reverb}%` : null,
+      m.stereo !== 0             ? `Stereo ${m.stereo > 0 ? "+" : ""}${m.stereo}%` : null,
+    ].filter(Boolean) : [];
+
     return `<article class="track-row">
       <div class="row-art">♫</div>
       <div class="row-main">
         <strong>${escapeHtml(item.name)}</strong>
         <span>${escapeHtml(item.originalName)} · ${formatSize(item.size)} · ${formatDateTime(item.createdAt)}</span>
+        ${metaBadges.length ? `<div class="editor-meta-badges">${metaBadges.map(b => `<span class="editor-meta-badge">${b}</span>`).join("")}</div>` : ""}
       </div>
       <div class="chips">
         <span class="chip ${statusClass(item.roblox?.status)}">R ${statusLabel(item.roblox?.status)}</span>
@@ -731,6 +742,27 @@ uploadBtn.onclick = () => {
   const fd = new FormData();
   fd.append("audio", selectedFile);
   fd.append("name", clampAssetName(assetName.value.trim() || selectedFile.name));
+
+  // Collect editor metadata if available
+  try {
+    const meta = {};
+    const gainEl   = document.getElementById("editorGain");
+    const speedEl  = document.getElementById("editorSpeed");
+    const pitchEl  = document.getElementById("editorPitch");
+    const reverbEl = document.getElementById("editorReverb");
+    const roomEl   = document.getElementById("editorRoom");
+    const stereoEl = document.getElementById("editorStereo");
+    if (gainEl)   meta.volume  = parseFloat(gainEl.value) || 0;
+    if (speedEl)  meta.speed   = parseFloat(speedEl.value) || 1;
+    if (pitchEl)  meta.pitch   = parseFloat(pitchEl.value) || 0;
+    if (reverbEl) meta.reverb  = parseFloat(reverbEl.value) || 0;
+    if (roomEl)   meta.room    = parseFloat(roomEl.value) || 50;
+    if (stereoEl) meta.stereo  = parseFloat(stereoEl.value) || 0;
+    // Only include if any non-default value
+    const hasEdit = meta.volume !== 0 || meta.speed !== 1 || meta.pitch !== 0 ||
+                    meta.reverb !== 0 || meta.stereo !== 0;
+    if (hasEdit) fd.append("editorMeta", JSON.stringify(meta));
+  } catch {}
 
   uploadBtn.disabled = true;
   $("#progressWrap").classList.remove("hidden");

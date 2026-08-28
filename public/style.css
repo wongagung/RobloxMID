@@ -834,3 +834,21 @@ body.light{--bg:#f5f7fb;--panel:rgba(255,255,255,.84);--line:rgba(15,23,42,.1);-
 }
 .add-account-form input:focus { border-color: #8b5cf666; }
 .add-account-form input::placeholder { color: #3d4558; }
+
+/* ── Editor meta badges ─────────────────────────────────────────────────── */
+.editor-meta-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+.editor-meta-badge {
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid #8b5cf633;
+  background: #8b5cf610;
+  color: #c4b5fd;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .02em;
+}

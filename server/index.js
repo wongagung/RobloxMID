@@ -471,12 +471,19 @@ app.post("/api/upload", upload.single("audio"), async (req, res) => {
 
   const originalExt = path.extname(req.file.originalname).toLowerCase();
   const id = crypto.randomUUID();
+  // Parse editor metadata if sent
+  let editorMeta = null;
+  try {
+    if (req.body.editorMeta) editorMeta = JSON.parse(req.body.editorMeta);
+  } catch {}
+
   const record = {
     id,
     name: clampAssetName(req.body.name?.trim() || path.basename(req.file.originalname, originalExt)),
     originalName: req.file.originalname,
     size: req.file.size,
     createdAt: new Date().toISOString(),
+    editorMeta,
     conversion: { status: supported.has(originalExt) ? "not_needed" : "pending" },
     roblox: { status: "pending" },
     telegram: { status: "pending" }
