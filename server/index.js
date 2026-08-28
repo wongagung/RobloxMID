@@ -231,14 +231,16 @@ async function optimizeForRoblox(inputPath, { autoVary = true } = {}) {
   // Build ffmpeg filter chain
   const filters = [];
   if (autoVary) {
-    // asetrate shifts pitch without changing duration, then atempo corrects speed
-    filters.push(`asetrate=44100*${(1 + pitchCents / 1200).toFixed(6)}`);
-    filters.push(`atempo=${(1 / (1 + pitchCents / 1200)).toFixed(6)}`); // compensate duration
-    filters.push(`atempo=${tempoRate.toFixed(6)}`);                      // apply tempo variation
-    filters.push(`aeval=val(0)+${noiseVol}*(random(0)-0.5):val(1)+${noiseVol}*(random(1)-0.5)`); // micro noise
+    // asetrate shifts pitch, atempo corrects duration
+    const rateRatio = (1 + pitchCents / 1200).toFixed(6);
+    const tempoComp = (1 / (1 + pitchCents / 1200)).toFixed(6);
+    filters.push(`asetrate=44100*${rateRatio}`);
+    filters.push(`atempo=${tempoComp}`);
+    filters.push(`atempo=${tempoRate.toFixed(6)}`);
   }
-  // Always: convert to mono 44100Hz for Roblox optimization
-  filters.push("pan=mono|c0=0.5*c0+0.5*c1");  // proper stereo-to-mono downmix
+  // Always: mono downmix + resample to 44100Hz
+  filters.push("pan=mono|c0=0.5*c0+0.5*c1");
+  filters.push("aresample=44100");
   const filterStr = filters.join(",");
 
   await execFileAsync("ffmpeg", [
