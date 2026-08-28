@@ -28,15 +28,12 @@ function writeAccounts(data) {
 function getActiveAccount() {
   const data = readAccounts();
   const active = data.accounts.find(a => a.id === data.active);
+  if (active) return active;
   // Fallback to env vars if no account selected
-  if (!active) {
-    const _activeAcc = getActiveAccount();
-  const apiKey = _activeAcc?.apiKey || process.env.ROBLOX_API_KEY;
-    const userId = process.env.ROBLOX_USER_ID;
-    if (apiKey && userId) return { id: "env", label: "Default (.env)", apiKey, userId };
-    return null;
-  }
-  return active;
+  const apiKey = process.env.ROBLOX_API_KEY;
+  const userId = process.env.ROBLOX_USER_ID;
+  if (apiKey && userId) return { id: "env", label: "Default (.env)", apiKey, userId };
+  return null;
 }
 // ─────────────────────────────────────────────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
