@@ -557,8 +557,7 @@ app.get("/api/history/export/csv", (_, res) => {
       const date    = item.uploadedAt ? new Date(item.uploadedAt).toISOString() : "";
       return [name, assetId, status, url, orig, date].join(",");
     })
-  ].join("
-");
+  ].join("\n");
 
   res.setHeader("Content-Type", "text/csv; charset=utf-8");
   res.setHeader("Content-Disposition", `attachment; filename="roblox-assets-${Date.now()}.csv"`);
