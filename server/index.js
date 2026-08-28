@@ -13,14 +13,14 @@ import { sendAudioToTelegram } from "./telegram.js";
 const execFileAsync = promisify(execFile);
 
 // ── Multi-account Roblox manager ─────────────────────────────────────────────
-const accountsFile = path.join(dataDir, "roblox-accounts.json");
-
 function readAccounts() {
+  const accountsFile = path.join(dataDir, "roblox-accounts.json");
   try { return JSON.parse(fs.readFileSync(accountsFile, "utf8")); }
   catch { return { active: null, accounts: [] }; }
 }
 
 function writeAccounts(data) {
+  const accountsFile = path.join(dataDir, "roblox-accounts.json");
   fs.mkdirSync(dataDir, { recursive: true });
   fs.writeFileSync(accountsFile, JSON.stringify(data, null, 2));
 }
