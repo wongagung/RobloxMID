@@ -502,7 +502,8 @@ app.post("/api/upload", upload.single("audio"), async (req, res) => {
 });
 
 async function pollModeration(recordId, assetId) {
-  const apiKey = process.env.ROBLOX_API_KEY;
+  const _uploadAcc = getActiveAccount();
+  const apiKey = _uploadAcc?.apiKey;
   if (!apiKey) return;
   const intervalMs = Math.max(5000, Number(process.env.ROBLOX_MODERATION_POLL_MS || 30000));
   const maxAttempts = Math.max(1, Number(process.env.ROBLOX_MODERATION_MAX_ATTEMPTS || 20));
@@ -624,7 +625,7 @@ async function processAudio(record, originalFilePath) {
       writeHistory(history);
     }
 
-    if (process.env.ROBLOX_API_KEY && process.env.ROBLOX_USER_ID) {
+    if (getActiveAccount()) {
       try {
         history = readHistory();
         item = history.find(x => x.id === record.id);
@@ -640,6 +641,9 @@ async function processAudio(record, originalFilePath) {
           console.warn("[optimize] Gagal optimasi, pakai file original:", e.message);
         }
         const uploadPath = optimizedPath || workingFilePath;
+
+        const _acc = getActiveAccount();
+        if (!_acc?.apiKey || !_acc?.userId) throw new Error("Roblox API key belum dikonfigurasi.");
 
         const result = await uploadAudioToRoblox({
           filePath: uploadPath,
