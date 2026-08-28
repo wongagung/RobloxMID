@@ -831,6 +831,110 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 });
 
+// ── Roblox Account Manager ───────────────────────────────────────────────────
+const accountDrawer = $("#accountDrawer");
+const accountList = $("#accountList");
+const manageAccountsBtn = $("#manageAccountsBtn");
+const accountDrawerClose = $("#accountDrawerClose");
+const addAccountForm = $("#addAccountForm");
+const accFormStatus = $("#accFormStatus");
+
+function setAccStatus(msg, isError = false) {
+  if (!accFormStatus) return;
+  accFormStatus.classList.remove("hidden");
+  accFormStatus.textContent = msg;
+  accFormStatus.className = "url-status " + (isError ? "error" : "info");
+}
+
+async function loadAccounts() {
+  const r = await fetch("/api/roblox-accounts");
+  const data = await r.json();
+
+  // Update roblox service row text
+  $("#robloxText").textContent = data.activeLabel || "Tidak ada akun aktif";
+  $("#robloxService").classList.toggle("off", !data.active && !data.hasEnvFallback);
+
+  if (!accountList) return;
+
+  const rows = [];
+  if (data.hasEnvFallback) {
+    const isActive = !data.active;
+    rows.push(`
+      <div class="account-item ${isActive ? "account-active" : ""}">
+        <div class="account-info">
+          <div class="account-label">.env Default ${isActive ? "✓" : ""}</div>
+          <div class="account-sub">Dari environment variable</div>
+        </div>
+        ${!isActive ? `<button class="ghost-btn account-activate-btn" data-id="env">Aktifkan</button>` : ""}
+      </div>`);
+  }
+  data.accounts.forEach(acc => {
+    const isActive = acc.id === data.active;
+    rows.push(`
+      <div class="account-item ${isActive ? "account-active" : ""}">
+        <div class="account-info">
+          <div class="account-label">${escapeHtml(acc.label)} ${isActive ? "✓" : ""}</div>
+          <div class="account-sub">User ID: ${acc.userId} · Key: ${acc.apiKey}</div>
+        </div>
+        <div style="display:flex;gap:5px">
+          ${!isActive ? `<button class="ghost-btn account-activate-btn" data-id="${acc.id}">Aktifkan</button>` : ""}
+          <button class="ghost-btn account-delete-btn" data-id="${acc.id}" style="color:#fca5a5;border-color:#ef444433">✕</button>
+        </div>
+      </div>`);
+  });
+
+  if (!rows.length) rows.push('<div style="padding:12px;color:var(--muted);font-size:12px">Belum ada akun tersimpan.</div>');
+  accountList.innerHTML = rows.join("");
+
+  accountList.querySelectorAll(".account-activate-btn").forEach(btn => {
+    btn.onclick = async () => {
+      await fetch(`/api/roblox-accounts/${btn.dataset.id}/activate`, { method: "PATCH" });
+      loadAccounts();
+    };
+  });
+
+  accountList.querySelectorAll(".account-delete-btn").forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm("Hapus akun ini?")) return;
+      await fetch(`/api/roblox-accounts/${btn.dataset.id}`, { method: "DELETE" });
+      loadAccounts();
+    };
+  });
+}
+
+if (manageAccountsBtn) {
+  manageAccountsBtn.onclick = () => {
+    accountDrawer.classList.toggle("hidden");
+    if (!accountDrawer.classList.contains("hidden")) loadAccounts();
+  };
+}
+if (accountDrawerClose) {
+  accountDrawerClose.onclick = () => accountDrawer.classList.add("hidden");
+}
+
+if (addAccountForm) {
+  addAccountForm.onsubmit = async (e) => {
+    e.preventDefault();
+    const label  = $("#accLabel").value.trim();
+    const userId = $("#accUserId").value.trim();
+    const apiKey = $("#accApiKey").value.trim();
+    setAccStatus("Menyimpan...");
+    const r = await fetch("/api/roblox-accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label, userId, apiKey })
+    });
+    const d = await r.json();
+    if (r.ok) {
+      setAccStatus("✓ Akun berhasil disimpan!");
+      addAccountForm.reset();
+      loadAccounts();
+    } else {
+      setAccStatus("✗ " + (d.error || "Gagal menyimpan."), true);
+    }
+  };
+}
+
 // Show logout button only when auth cookie is present
 if (document.cookie.includes("_auth")) {
   $("#logoutBtn").classList.remove("hidden");

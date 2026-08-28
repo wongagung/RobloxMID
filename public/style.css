@@ -747,3 +747,90 @@ body.light{--bg:#f5f7fb;--panel:rgba(255,255,255,.84);--line:rgba(15,23,42,.1);-
   background: #8b5cf622;
   border-color: #8b5cf655;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ACCOUNT MANAGER DRAWER
+   ═══════════════════════════════════════════════════════════════════════════ */
+.account-drawer {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 8px;
+  background: #080b13;
+}
+.account-drawer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #ffffff04;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+.account-list {
+  max-height: 200px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #ffffff15 transparent;
+}
+.account-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #ffffff06;
+  transition: background .12s;
+}
+.account-item:last-child { border-bottom: none; }
+.account-item:hover { background: #ffffff03; }
+.account-active { background: #8b5cf608; }
+.account-info { flex: 1; min-width: 0; }
+.account-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.account-active .account-label { color: #c4b5fd; }
+.account-sub {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.account-activate-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  white-space: nowrap;
+}
+
+/* Add account form */
+.add-account-form {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+}
+.add-account-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+.add-account-form input {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0d1117;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  transition: border-color .15s;
+}
+.add-account-form input:focus { border-color: #8b5cf666; }
+.add-account-form input::placeholder { color: #3d4558; }

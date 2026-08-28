@@ -284,7 +284,27 @@
       <aside class="panel status-panel">
         <div class="panel-head"><div><h2>Services</h2><p>Connection status</p></div></div>
         <div class="service" id="robloxService">
-          <div class="service-logo">R</div><div><strong>Roblox Open Cloud</strong><span id="robloxText">Checking...</span></div><i class="dot"></i>
+          <div class="service-logo">R</div>
+          <div style="flex:1"><strong>Roblox Open Cloud</strong><span id="robloxText">Checking...</span></div>
+          <button id="manageAccountsBtn" class="icon-btn" title="Kelola akun Roblox">⚙</button>
+          <i class="dot"></i>
+        </div>
+
+        <!-- Account manager drawer -->
+        <div id="accountDrawer" class="account-drawer hidden">
+          <div class="account-drawer-head">
+            <span>Akun Roblox</span>
+            <button id="accountDrawerClose" class="icon-btn">✕</button>
+          </div>
+          <div id="accountList" class="account-list"></div>
+          <form id="addAccountForm" class="add-account-form">
+            <div class="add-account-title">+ Tambah Akun</div>
+            <input id="accLabel"  type="text"     placeholder="Label (contoh: Akun Utama)" required>
+            <input id="accUserId" type="text"     placeholder="User ID (angka)" required>
+            <input id="accApiKey" type="password" placeholder="API Key (Open Cloud)" required>
+            <button type="submit" class="primary-btn" style="margin-top:4px">Simpan</button>
+          </form>
+          <div id="accFormStatus" class="url-status hidden"></div>
         </div>
         <div class="service" id="telegramService">
           <div class="service-logo tg">✈</div><div><strong>Telegram</strong><span id="telegramText">Checking...</span></div><i class="dot"></i>

@@ -11,6 +11,34 @@ import { uploadAudioToRoblox, getAssetModerationStatus } from "./roblox.js";
 import { sendAudioToTelegram } from "./telegram.js";
 
 const execFileAsync = promisify(execFile);
+
+// ── Multi-account Roblox manager ─────────────────────────────────────────────
+const accountsFile = path.join(dataDir, "roblox-accounts.json");
+
+function readAccounts() {
+  try { return JSON.parse(fs.readFileSync(accountsFile, "utf8")); }
+  catch { return { active: null, accounts: [] }; }
+}
+
+function writeAccounts(data) {
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.writeFileSync(accountsFile, JSON.stringify(data, null, 2));
+}
+
+function getActiveAccount() {
+  const data = readAccounts();
+  const active = data.accounts.find(a => a.id === data.active);
+  // Fallback to env vars if no account selected
+  if (!active) {
+    const _activeAcc = getActiveAccount();
+  const apiKey = _activeAcc?.apiKey || process.env.ROBLOX_API_KEY;
+    const userId = process.env.ROBLOX_USER_ID;
+    if (apiKey && userId) return { id: "env", label: "Default (.env)", apiKey, userId };
+    return null;
+  }
+  return active;
+}
+// ─────────────────────────────────────────────────────────────────────────────
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const root = path.resolve(__dirname, "..");
@@ -288,10 +316,65 @@ app.get("/api/config", async (_, res) => {
     ytdlpVersion,
     autoVary: process.env.AUTO_VARY !== "false",
     robloxOptimize: true, // always mono 44100Hz 128kbps
-    robloxConfigured: Boolean(process.env.ROBLOX_API_KEY && process.env.ROBLOX_USER_ID),
+    robloxConfigured: Boolean(getActiveAccount()),
     telegramConfigured: Boolean(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID)
   });
 });
+
+// ── Roblox account management ────────────────────────────────────────────────
+app.get("/api/roblox-accounts", (_, res) => {
+  const data = readAccounts();
+  // Mask API keys — only show last 6 chars
+  const safe = data.accounts.map(a => ({
+    ...a,
+    apiKey: a.apiKey ? "••••••" + a.apiKey.slice(-6) : "",
+  }));
+  const activeAccount = getActiveAccount();
+  res.json({
+    active: data.active,
+    accounts: safe,
+    hasEnvFallback: Boolean(process.env.ROBLOX_API_KEY && process.env.ROBLOX_USER_ID),
+    activeLabel: activeAccount?.label || "Tidak ada akun aktif",
+  });
+});
+
+app.post("/api/roblox-accounts", express.json(), (req, res) => {
+  const { label, apiKey, userId } = req.body || {};
+  if (!label || !apiKey || !userId) {
+    return res.status(400).json({ error: "Label, API Key, dan User ID wajib diisi." });
+  }
+  if (apiKey.length < 10) return res.status(400).json({ error: "API Key tidak valid." });
+  if (!/^\d+$/.test(userId)) return res.status(400).json({ error: "User ID harus berupa angka." });
+
+  const data = readAccounts();
+  const id = crypto.randomUUID();
+  data.accounts.push({ id, label: label.trim(), apiKey: apiKey.trim(), userId: userId.trim() });
+  if (!data.active) data.active = id; // auto-select first account
+  writeAccounts(data);
+  res.json({ ok: true, id });
+});
+
+app.patch("/api/roblox-accounts/:id/activate", (req, res) => {
+  const data = readAccounts();
+  const acc = data.accounts.find(a => a.id === req.params.id);
+  if (!acc && req.params.id !== "env") return res.status(404).json({ error: "Akun tidak ditemukan." });
+  data.active = req.params.id === "env" ? null : req.params.id;
+  writeAccounts(data);
+  res.json({ ok: true });
+});
+
+app.delete("/api/roblox-accounts/:id", (req, res) => {
+  const data = readAccounts();
+  const idx = data.accounts.findIndex(a => a.id === req.params.id);
+  if (idx < 0) return res.status(404).json({ error: "Akun tidak ditemukan." });
+  data.accounts.splice(idx, 1);
+  if (data.active === req.params.id) {
+    data.active = data.accounts[0]?.id || null;
+  }
+  writeAccounts(data);
+  res.json({ ok: true });
+});
+// ─────────────────────────────────────────────────────────────────────────────
 
 // ── Toggle auto-vary ─────────────────────────────────────────────────────────
 app.post("/api/toggle-auto-vary", express.json(), (req, res) => {
@@ -566,8 +649,8 @@ async function processAudio(record, originalFilePath) {
           filePath: uploadPath,
           displayName: record.name,
           description: `Uploaded with Roblox Music Uploader — ${record.originalName}`,
-          userId: process.env.ROBLOX_USER_ID,
-          apiKey: process.env.ROBLOX_API_KEY
+          userId: _acc.userId,
+          apiKey: _acc.apiKey
         });
 
         // Cleanup optimized temp file
