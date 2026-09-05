@@ -56,6 +56,20 @@ export function createAssetHubRouter() {
     } finally { if (temp) { try { fs.unlinkSync(temp); } catch {} } }
   });
 
+  r.get("/api/assets/:assetId/thumbnail", async (req,res)=>{
+    try {
+      const id=String(req.params.assetId||"").trim();
+      if(!/^\d+$/.test(id)) return res.status(400).json({error:"Asset ID tidak valid."});
+      const url=`https://thumbnails.roblox.com/v1/assets?assetIds=${encodeURIComponent(id)}&returnPolicy=PlaceHolder&size=512x512&format=Png&isCircular=false`;
+      const response=await fetch(url);
+      const text=await response.text();
+      let data={}; try{data=text?JSON.parse(text):{};}catch{}
+      if(!response.ok) return res.status(response.status).json({error:data?.errors?.[0]?.message||`Thumbnail HTTP ${response.status}`});
+      const item=data?.data?.[0]||null;
+      res.json({ok:true,state:item?.state||"Unavailable",imageUrl:item?.imageUrl||null,version:item?.version||null});
+    } catch(e){res.status(400).json({error:e?.message||"Gagal mengambil thumbnail."});}
+  });
+
   r.get("/api/assets/:assetId", async (req, res) => {
     try {
       const { apiKey } = activeAccount();
