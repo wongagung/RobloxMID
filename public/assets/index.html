@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#080a12">
+  <title>Roblox Asset Hub</title>
+  <meta name="description" content="Universal Roblox asset upload workspace.">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+  <div class="grid-bg"></div>
+
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="Roblox Music Lab">
+      <span class="brand-mark">R</span>
+      <span><b>ROBLOX</b> <em>ASSET HUB</em></span>
+    </a>
+    <nav class="topnav">
+      <a href="/">Music Lab</a>
+      <a class="active" href="/assets/">Asset Hub</a>
+    </nav>
+    <div class="top-status"><span class="status-dot"></span> Open Cloud ready</div>
+  </header>
+
+  <main class="shell">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">ROBLOX CREATOR WORKSPACE</div>
+        <h1>One place for<br><span>every asset.</span></h1>
+        <p>Upload images, decals, models, animations, audio and more through one polished workspace — without changing the existing Music Lab.</p>
+        <div class="hero-actions">
+          <button class="hero-btn primary" id="scrollUpload">Start uploading <span>↗</span></button>
+          <a class="hero-btn ghost" href="/">Open Music Lab</a>
+        </div>
+      </div>
+      <div class="hero-orbit" aria-hidden="true">
+        <div class="orbit orbit-1"></div>
+        <div class="orbit orbit-2"></div>
+        <div class="orbit-core"><span>R</span><small>ASSETS</small></div>
+        <div class="float-card card-image">▧ <b>Image</b></div>
+        <div class="float-card card-model">◇ <b>Model</b></div>
+        <div class="float-card card-audio">♫ <b>Audio</b></div>
+        <div class="float-card card-video">▶ <b>Video</b></div>
+      </div>
+    </section>
+
+    <section class="workspace" id="uploadWorkspace">
+      <div class="panel uploader">
+        <div class="panel-title">
+          <div>
+            <div class="kicker">UPLOAD CENTER</div>
+            <h2>Create asset</h2>
+            <p>Choose a type and drop your source file.</p>
+          </div>
+          <div class="limit-badge">MAX 20 MB</div>
+        </div>
+
+        <div class="type-grid" id="typeGrid">
+          <button class="type-card active" data-type="image">
+            <span class="type-icon">▧</span><span><b>Image</b><small>PNG · JPG · BMP · TGA</small></span>
+          </button>
+          <button class="type-card" data-type="decal">
+            <span class="type-icon">◈</span><span><b>Decal</b><small>Image texture</small></span>
+          </button>
+          <button class="type-card" data-type="model">
+            <span class="type-icon">◇</span><span><b>Model</b><small>3D asset</small></span>
+          </button>
+          <button class="type-card" data-type="mesh">
+            <span class="type-icon">△</span><span><b>Mesh</b><small>3D geometry</small></span>
+          </button>
+          <button class="type-card" data-type="animation">
+            <span class="type-icon">◎</span><span><b>Animation</b><small>Rig animation</small></span>
+          </button>
+          <button class="type-card" data-type="audio">
+            <span class="type-icon">♫</span><span><b>Audio</b><small>MP3 · WAV · OGG</small></span>
+          </button>
+          <button class="type-card" data-type="video">
+            <span class="type-icon">▶</span><span><b>Video</b><small>MP4 · MOV</small></span>
+          </button>
+        </div>
+
+        <label class="dropzone" id="dropzone">
+          <input id="fileInput" type="file" hidden>
+          <div class="drop-icon">↑</div>
+          <h3 id="dropTitle">Drop your image here</h3>
+          <p>or <u>browse from your computer</u></p>
+          <div class="drop-meta" id="dropMeta">PNG · JPG · BMP · TGA · up to 20 MB</div>
+        </label>
+
+        <div class="selected-file hidden" id="selectedFile">
+          <div class="file-icon" id="fileIcon">▧</div>
+          <div class="file-info">
+            <strong id="fileName">asset.png</strong>
+            <span id="fileMeta">0 MB</span>
+          </div>
+          <button class="remove-btn" id="removeFile" type="button">×</button>
+        </div>
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Asset name</span>
+            <input id="assetName" maxlength="50" placeholder="e.g. Neon Logo 2026">
+            <small id="nameHint">3–50 characters</small>
+          </label>
+          <label class="field">
+            <span>Creator</span>
+            <select id="creatorType">
+              <option value="user">My user</option>
+              <option value="group">Group</option>
+            </select>
+          </label>
+          <label class="field full">
+            <span>Description <i>optional</i></span>
+            <textarea id="description" maxlength="1000" rows="3" placeholder="What is this asset for?"></textarea>
+          </label>
+        </div>
+
+        <div class="notice">
+          <span>✦</span>
+          <p><b>Moderation is handled by Roblox.</b> Upload completion means the asset was created; it may still be under review.</p>
+        </div>
+
+        <button class="upload-btn" id="uploadBtn" disabled>
+          <span id="uploadBtnText">Select a file to continue</span><b>→</b>
+        </button>
+        <div class="progress hidden" id="progressWrap">
+          <div class="progress-top"><span id="progressText">Preparing upload...</span><b id="progressPct">0%</b></div>
+          <div class="progress-track"><i id="progressBar"></i></div>
+        </div>
+      </div>
+
+      <aside class="side-stack">
+        <div class="panel quick-panel">
+          <div class="kicker">WORKFLOW</div>
+          <h3>Simple by design.</h3>
+          <div class="workflow">
+            <div><span>01</span><p><b>Pick a type</b><small>Image, model, audio and more.</small></p></div>
+            <div><span>02</span><p><b>Drop your file</b><small>We validate format and size.</small></p></div>
+            <div><span>03</span><p><b>Publish to Roblox</b><small>Track operation and moderation.</small></p></div>
+          </div>
+        </div>
+
+        <div class="panel stats-panel">
+          <div class="stats-head"><div><div class="kicker">YOUR ACTIVITY</div><h3>Asset status</h3></div><span class="live-pill"><i></i> Live</span></div>
+          <div class="stats-grid">
+            <div><strong id="statCompleted">0</strong><small>completed</small></div>
+            <div><strong id="statReviewing">0</strong><small>reviewing</small></div>
+            <div><strong id="statRejected">0</strong><small>rejected</small></div>
+          </div>
+        </div>
+      </aside>
+    </section>
+
+    <section class="panel history-panel">
+      <div class="panel-title history-title">
+        <div><div class="kicker">RECENT ASSETS</div><h2>Upload history</h2><p>Your newest assets will appear here.</p></div>
+        <button class="ghost-small" id="clearHistory" type="button">Clear view</button>
+      </div>
+      <div id="historyList" class="history-list">
+        <div class="empty-history"><span>◇</span><h3>No assets yet</h3><p>Uploaded assets will be shown here.</p></div>
+      </div>
+    </section>
+
+    <footer class="footer"><span>Roblox Asset Hub</span><span>•</span><span>Separate from Music Lab</span><span>•</span><a href="/">Back to Music Lab</a></footer>
+  </main>
+
+  <div class="toast" id="toast"></div>
+  <script src="./app.js" defer></script>
+</body>
+</html>
