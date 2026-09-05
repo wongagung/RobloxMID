@@ -1,151 +1,18 @@
 <!doctype html>
-<html lang="id">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#080a12">
-  <title>Roblox Asset Hub</title>
-  <meta name="description" content="Universal Roblox asset upload workspace.">
-  <link rel="stylesheet" href="./style.css">
-  <link rel="stylesheet" href="./multi.css">
-</head>
-<body>
-  <div class="ambient ambient-a"></div>
-  <div class="ambient ambient-b"></div>
-  <div class="grid-bg"></div>
-
-  <header class="topbar">
-    <a class="brand" href="/" aria-label="Roblox Music Lab">
-      <span class="brand-mark">R</span>
-      <span><b>ROBLOX</b> <em>ASSET HUB</em></span>
-    </a>
-    <nav class="topnav">
-      <a href="/">Music Lab</a>
-      <a class="active" href="/assets/">Asset Hub</a>
-    </nav>
-    <div class="top-status"><span class="status-dot"></span> Open Cloud ready</div>
-  </header>
-
-  <main class="shell">
-    <section class="hero">
-      <div class="hero-copy">
-        <div class="eyebrow">ROBLOX CREATOR WORKSPACE</div>
-        <h1>One place for<br><span>every asset.</span></h1>
-        <p>Upload images, decals, models, animations, audio and more through one polished workspace — without changing the existing Music Lab.</p>
-        <div class="hero-actions">
-          <button class="hero-btn primary" id="scrollUpload">Start uploading <span>↗</span></button>
-          <a class="hero-btn ghost" href="/">Open Music Lab</a>
-        </div>
-      </div>
-      <div class="hero-orbit" aria-hidden="true">
-        <div class="orbit orbit-1"></div>
-        <div class="orbit orbit-2"></div>
-        <div class="orbit-core"><span>R</span><small>ASSETS</small></div>
-        <div class="float-card card-image">▧ <b>Image</b></div>
-        <div class="float-card card-model">◇ <b>Model</b></div>
-        <div class="float-card card-audio">♫ <b>Audio</b></div>
-        <div class="float-card card-video">▶ <b>Video</b></div>
-      </div>
-    </section>
-
-    <section class="workspace" id="uploadWorkspace">
-      <div class="panel uploader">
-        <div class="panel-title">
-          <div>
-            <div class="kicker">UPLOAD CENTER</div>
-            <h2>Create asset</h2>
-            <p>Choose a type and drop one or many source files.</p>
-          </div>
-          <div class="limit-badge">MAX 20 MB / FILE</div>
-        </div>
-
-        <div class="type-grid" id="typeGrid">
-          <button class="type-card active" data-type="image"><span class="type-icon">▧</span><span><b>Image</b><small>PNG · JPG · BMP · TGA</small></span></button>
-          <button class="type-card" data-type="decal"><span class="type-icon">◈</span><span><b>Decal</b><small>Image texture</small></span></button>
-          <button class="type-card" data-type="model"><span class="type-icon">◇</span><span><b>Model</b><small>3D asset</small></span></button>
-          <button class="type-card" data-type="mesh"><span class="type-icon">△</span><span><b>Mesh</b><small>Delivery mesh</small></span></button>
-          <button class="type-card" data-type="animation"><span class="type-icon">◎</span><span><b>Animation</b><small>RBXM · RBXMX</small></span></button>
-          <button class="type-card" data-type="audio"><span class="type-icon">♫</span><span><b>Audio</b><small>MP3 · WAV · OGG</small></span></button>
-          <button class="type-card" data-type="video"><span class="type-icon">▶</span><span><b>Video</b><small>MP4 · MOV</small></span></button>
-        </div>
-
-        <label class="dropzone" id="dropzone">
-          <input id="fileInput" type="file" hidden multiple>
-          <div class="drop-icon">↑</div>
-          <h3 id="dropTitle">Drop your image files here</h3>
-          <p>or <u>browse multiple files</u> from your computer</p>
-          <div class="drop-meta" id="dropMeta">PNG · JPG · BMP · TGA · under 8000×8000</div>
-        </label>
-
-        <div class="form-grid">
-          <label class="field">
-            <span>Asset name prefix</span>
-            <input id="assetName" maxlength="50" placeholder="e.g. Neon Logo 2026">
-            <small id="nameHint">3–50 characters · applied to every selected file</small>
-          </label>
-          <label class="field">
-            <span>Creator</span>
-            <select id="creatorType">
-              <option value="user">My user</option>
-              <option value="group">Group</option>
-            </select>
-          </label>
-          <label class="field full">
-            <span>Description <i>optional</i></span>
-            <textarea id="description" maxlength="1000" rows="3" placeholder="What are these assets for?"></textarea>
-          </label>
-        </div>
-
-        <div class="notice">
-          <span>✦</span>
-          <p><b>Batch upload, one Roblox operation per file.</b> Files run through a small controlled queue so a large batch does not flood Roblox.</p>
-        </div>
-
-        <button class="upload-btn" id="uploadBtn" disabled>
-          <span id="uploadBtnText">Select files to continue</span><b>→</b>
-        </button>
-        <div class="progress hidden" id="progressWrap">
-          <div class="progress-top"><span id="progressText">Preparing upload...</span><b id="progressPct">0%</b></div>
-          <div class="progress-track"><i id="progressBar"></i></div>
-        </div>
-      </div>
-
-      <aside class="side-stack">
-        <div class="panel quick-panel">
-          <div class="kicker">WORKFLOW</div>
-          <h3>Batch it.</h3>
-          <div class="workflow">
-            <div><span>01</span><p><b>Pick a type</b><small>All selected files use the chosen asset type.</small></p></div>
-            <div><span>02</span><p><b>Drop many files</b><small>Review the queue before publishing.</small></p></div>
-            <div><span>03</span><p><b>Upload all</b><small>Each asset gets its own ID and status.</small></p></div>
-          </div>
-        </div>
-
-        <div class="panel stats-panel">
-          <div class="stats-head"><div><div class="kicker">YOUR ACTIVITY</div><h3>Asset status</h3></div><span class="live-pill"><i></i> Live</span></div>
-          <div class="stats-grid">
-            <div><strong id="statCompleted">0</strong><small>completed</small></div>
-            <div><strong id="statReviewing">0</strong><small>reviewing</small></div>
-            <div><strong id="statRejected">0</strong><small>rejected</small></div>
-          </div>
-        </div>
-      </aside>
-    </section>
-
-    <section class="panel history-panel">
-      <div class="panel-title history-title">
-        <div><div class="kicker">RECENT ASSETS</div><h2>Upload history</h2><p>Your newest assets will appear here.</p></div>
-        <button class="ghost-small" id="clearHistory" type="button">Clear view</button>
-      </div>
-      <div id="historyList" class="history-list">
-        <div class="empty-history"><span>◇</span><h3>No assets yet</h3><p>Uploaded assets will be shown here.</p></div>
-      </div>
-    </section>
-
-    <footer class="footer"><span>Roblox Asset Hub</span><span>•</span><span>Separate from Music Lab</span><span>•</span><a href="/">Back to Music Lab</a></footer>
-  </main>
-
-  <div class="toast" id="toast"></div>
-  <script src="./app.js" defer></script>
-</body>
-</html>
+<html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#080a12"><title>Roblox Asset Hub</title><link rel="stylesheet" href="./style.css"><link rel="stylesheet" href="./multi.css"></head>
+<body><div class="ambient ambient-a"></div><div class="ambient ambient-b"></div><div class="grid-bg"></div>
+<header class="topbar"><a class="brand" href="/" aria-label="Roblox Music Lab"><span class="brand-mark">R</span><span><b>ROBLOX</b> <em>ASSET HUB</em></span></a><nav class="topnav"><a href="/">Music Lab</a><a class="active" href="/assets/">Asset Hub</a></nav><div class="top-status"><span class="status-dot"></span> Open Cloud</div></header>
+<main class="shell">
+<section class="hero"><div class="hero-copy"><div class="eyebrow">ROBLOX CREATOR WORKSPACE</div><h1>One place for<br><span>every asset.</span></h1><p>Bulk upload, inspect, organize, version and manage Roblox assets from one polished workspace.</p><div class="hero-actions"><button class="hero-btn primary" id="scrollUpload">Start uploading <span>↗</span></button><a class="hero-btn ghost" href="/">Open Music Lab</a></div></div><div class="hero-orbit" aria-hidden="true"><div class="orbit orbit-1"></div><div class="orbit orbit-2"></div><div class="orbit-core"><span>R</span><small>ASSETS</small></div><div class="float-card card-image">▧ <b>Image</b></div><div class="float-card card-model">◇ <b>Model</b></div><div class="float-card card-audio">♫ <b>Audio</b></div><div class="float-card card-video">▶ <b>Video</b></div></div></section>
+<section class="workspace" id="uploadWorkspace"><div class="panel uploader"><div class="panel-title"><div><div class="kicker">BULK UPLOAD</div><h2>Create assets</h2><p>Select many files, review the queue, then publish.</p></div><div class="limit-badge">20 MB / FILE</div></div>
+<div class="type-grid" id="typeGrid"><button class="type-card active" data-type="image"><span class="type-icon">▧</span><span><b>Image</b><small>PNG · JPG · BMP · TGA</small></span></button><button class="type-card" data-type="decal"><span class="type-icon">◈</span><span><b>Decal</b><small>Image texture</small></span></button><button class="type-card" data-type="model"><span class="type-icon">◇</span><span><b>Model</b><small>FBX · GLTF · GLB</small></span></button><button class="type-card" data-type="animation"><span class="type-icon">◎</span><span><b>Animation</b><small>RBXM · RBXMX · FBX</small></span></button><button class="type-card" data-type="audio"><span class="type-icon">♫</span><span><b>Audio</b><small>MP3 · WAV · OGG</small></span></button><button class="type-card" data-type="video"><span class="type-icon">▶</span><span><b>Video</b><small>MP4 · MOV · WEBM</small></span></button></div>
+<label class="dropzone" id="dropzone"><input id="fileInput" type="file" hidden multiple><div class="drop-icon">↑</div><h3 id="dropTitle">Drop your files here</h3><p>or <u>browse multiple files</u></p><div class="drop-meta" id="dropMeta">Choose a type first · max 20 MB per asset</div></label>
+<div class="form-grid"><label class="field"><span>Asset name prefix</span><input id="assetName" maxlength="50" placeholder="e.g. Environment"><small id="nameHint">3–50 characters · combined with filename</small></label><label class="field"><span>Creator</span><select id="creatorType"><option value="user">My user</option><option value="group">Group</option></select></label><label class="field full group-field hidden" id="groupField"><span>Group ID</span><input id="groupId" inputmode="numeric" placeholder="123456789"></label><label class="field full"><span>Description <i>optional</i></span><textarea id="description" maxlength="1000" rows="3" placeholder="What are these assets for?"></textarea></label></div>
+<div class="notice"><span>✦</span><p><b>Smart bulk queue.</b> Each file becomes its own Roblox operation, with retry, result links and individual status.</p></div>
+<div class="queue-toolbar"><span id="selectionSummary">0 files selected</span><div><button id="addMore" class="ghost-small" type="button">+ Add files</button><button id="clearQueue" class="ghost-small" type="button">Clear</button></div></div>
+</div><aside class="side-stack"><div class="panel quick-panel"><div class="kicker">WORKFLOW</div><h3>Asset command center.</h3><div class="workflow"><div><span>01</span><p><b>Pick a type</b><small>Image, decal, model, animation, audio or video.</small></p></div><div><span>02</span><p><b>Build a batch</b><small>Drop dozens of files and rename with a prefix.</small></p></div><div><span>03</span><p><b>Manage results</b><small>Inspect metadata, versions and links.</small></p></div></div></div><div class="panel stats-panel"><div class="stats-head"><div><div class="kicker">YOUR ACTIVITY</div><h3>Asset status</h3></div><span class="live-pill"><i></i> Live</span></div><div class="stats-grid"><div><strong id="statCompleted">0</strong><small>completed</small></div><div><strong id="statReviewing">0</strong><small>reviewing</small></div><div><strong id="statRejected">0</strong><small>rejected</small></div></div></div></aside></section>
+<section class="panel queue-panel" id="queuePanel"><div class="panel-title"><div><div class="kicker">UPLOAD QUEUE</div><h2>Batch queue</h2><p>Pause, resume, retry and inspect every file.</p></div><div class="queue-controls"><button id="uploadAll" class="upload-btn compact-btn" disabled>Upload all →</button><button id="pauseQueue" class="ghost-small" type="button">Pause</button><button id="retryFailed" class="ghost-small" type="button">Retry failed</button></div></div><div class="bulk-summary"><div><strong id="queueCount">0</strong><small>selected</small></div><div><strong id="queueReady">0</strong><small>ready</small></div><div><strong id="queueRunning">0</strong><small>uploading</small></div><div><strong id="queueDone">0</strong><small>completed</small></div><div><strong id="queueErrors">0</strong><small>failed</small></div></div><div id="queueList" class="queue-list"><div class="empty-history"><span>◇</span><h3>Queue is empty</h3><p>Add multiple files above to build a batch.</p></div></div></section>
+<section class="panel history-panel"><div class="panel-title history-title"><div><div class="kicker">ASSET LIBRARY</div><h2>Recent assets</h2><p>Search, inspect and export your asset manifest.</p></div><div class="library-actions"><input id="assetSearch" class="library-search" placeholder="Search name or ID..."><button id="exportManifest" class="ghost-small" type="button">Export JSON</button><button id="clearHistory" class="ghost-small" type="button">Clear view</button></div></div><div class="history-tabs"><button class="history-tab active" data-filter="all">All</button><button class="history-tab" data-filter="image">Images</button><button class="history-tab" data-filter="decal">Decals</button><button class="history-tab" data-filter="model">Models</button><button class="history-tab" data-filter="animation">Animations</button><button class="history-tab" data-filter="audio">Audio</button><button class="history-tab" data-filter="video">Video</button></div><div id="historyList" class="history-list"></div></section>
+<section class="panel inspector-panel" id="inspectorPanel"><div class="panel-title"><div><div class="kicker">ASSET INSPECTOR</div><h2 id="inspectorTitle">Select an asset</h2><p>Metadata, versions and management tools.</p></div><button id="closeInspector" class="ghost-small" type="button">Close</button></div><div id="inspectorBody" class="inspector-empty">Choose an asset from the library.</div></section>
+<footer class="footer"><span>Roblox Asset Hub</span><span>•</span><span>Bulk uploader · Inspector · Versions · Manifest</span><span>•</span><a href="/">Back to Music Lab</a></footer>
+</main><div class="toast" id="toast"></div><script src="./app.js" defer></script></body></html>
