@@ -1,5 +1,7 @@
 import fs from "fs";
 import path from "path";
+import express from "express";
+import multer from "multer";
 
 const API_BASE = "https://apis.roblox.com";
 
@@ -10,6 +12,30 @@ function mimeFor(ext) {
     ".ogg": "audio/ogg",
     ".flac": "audio/flac"
   })[ext] || null;
+}
+
+function assetMimeFor(assetType, ext) {
+  const maps = {
+    Image: {
+      ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".bmp": "image/bmp", ".tga": "image/tga"
+    },
+    Decal: {
+      ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".bmp": "image/bmp", ".tga": "image/tga"
+    },
+    Model: {
+      ".fbx": "model/fbx", ".gltf": "model/gltf+json", ".glb": "model/gltf-binary", ".rbxm": "model/x-rbxm", ".rbxmx": "model/x-rbxm"
+    },
+    Animation: {
+      ".rbxm": "model/x-rbxm", ".rbxmx": "model/x-rbxm"
+    },
+    Audio: {
+      ".mp3": "audio/mpeg", ".wav": "audio/wav", ".ogg": "audio/ogg", ".flac": "audio/flac"
+    },
+    Video: {
+      ".mp4": "video/mp4", ".mov": "video/mov"
+    }
+  };
+  return maps[assetType]?.[ext] || null;
 }
 
 function safeDeleteFile(filePath) {
@@ -366,3 +392,230 @@ export async function uploadAudioToRoblox({
     throw error;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Universal Asset Hub uploader.
+// Registered through Express' listen hook so the existing Music Lab routes
+// remain untouched. The endpoint accepts exactly one file per HTTP request;
+// the Asset Hub frontend handles multi-upload with a controlled queue.
+const ASSET_MAX_BYTES = Number(process.env.ASSET_HUB_MAX_MB || 20) * 1024 * 1024;
+const ASSET_UPLOAD_DIR = path.resolve(
+  process.env.ASSET_HUB_UPLOAD_DIR || path.join(process.cwd(), "uploads")
+);
+fs.mkdirSync(ASSET_UPLOAD_DIR, { recursive: true });
+
+const assetStorage = multer.diskStorage({
+  destination: (_, __, cb) => cb(null, ASSET_UPLOAD_DIR),
+  filename: (_, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase() || ".bin";
+    cb(null, `asset-${Date.now()}-${Math.random().toString(16).slice(2)}${ext}`);
+  }
+});
+
+const assetUpload = multer({
+  storage: assetStorage,
+  limits: { fileSize: ASSET_MAX_BYTES }
+});
+
+function readAssetHubAccount() {
+  const accountsFile = path.join(process.cwd(), "data", "roblox-accounts.json");
+  try {
+    const data = JSON.parse(fs.readFileSync(accountsFile, "utf8"));
+    const account = data.accounts?.find(a => a.id === data.active);
+    if (account?.apiKey && account?.userId) return account;
+  } catch {}
+
+  const apiKey = process.env.ROBLOX_API_KEY;
+  const userId = process.env.ROBLOX_USER_ID;
+  if (apiKey && userId) return { id: "env", label: "Default (.env)", apiKey, userId };
+  return null;
+}
+
+function clampDisplayName(value, fallback) {
+  let name = String(value || fallback || "Asset").trim().slice(0, 50).trim();
+  if (name.length < 3) name = `${name} Asset`.slice(0, 50);
+  return name;
+}
+
+export async function uploadAssetToRoblox({
+  filePath,
+  assetType,
+  displayName,
+  description = "",
+  userId,
+  groupId,
+  apiKey
+}) {
+  const allowedTypes = new Set(["Image", "Decal", "Model", "Animation", "Audio", "Video"]);
+  if (!allowedTypes.has(assetType)) {
+    throw new Error(`Asset type tidak didukung: ${assetType}`);
+  }
+  if (!apiKey) throw new Error("Roblox API key tidak ditemukan.");
+  if (!filePath || !fs.existsSync(filePath)) throw new Error("File upload tidak ditemukan.");
+
+  const stat = fs.statSync(filePath);
+  if (!stat.isFile() || stat.size <= 0) throw new Error("File upload kosong atau tidak valid.");
+  if (stat.size > ASSET_MAX_BYTES) throw new Error(`File terlalu besar. Batas Asset Hub ${Math.round(ASSET_MAX_BYTES / 1024 / 1024)} MB.`);
+
+  if (assetType === "Mesh") {
+    throw new Error("Mesh biasa tidak dapat diupload langsung melalui Create Asset API. Gunakan Model atau Roblox Asset Delivery mesh.");
+  }
+
+  const ext = path.extname(filePath).toLowerCase();
+  const mimeType = assetMimeFor(assetType, ext);
+  if (!mimeType) throw new Error(`Format ${assetType} tidak sesuai: ${ext || "tanpa ekstensi"}.`);
+
+  const creator = groupId
+    ? { groupId: String(groupId) }
+    : { userId: String(userId || "") };
+
+  if (!creator.userId && !creator.groupId) {
+    throw new Error("Creator userId/groupId tidak ditemukan.");
+  }
+
+  const request = {
+    assetType,
+    displayName: clampDisplayName(displayName, path.basename(filePath, ext)),
+    description: String(description || "").slice(0, 1000),
+    creationContext: { creator }
+  };
+
+  const buffer = fs.readFileSync(filePath);
+  const multipart = createMultipartBody({
+    request,
+    fileBuffer: buffer,
+    fileName: path.basename(filePath),
+    fileContentType: mimeType
+  });
+
+  const created = await robloxRequest(`${API_BASE}/assets/v1/assets`, {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "Content-Type": multipart.contentType,
+      "Content-Length": String(multipart.body.length)
+    },
+    body: multipart.body
+  });
+
+  const operationId = created?.operationId || created?.path?.split("/").pop() || null;
+  const directAssetId = created?.assetId || created?.asset?.assetId || created?.asset?.id || created?.id || null;
+
+  if (directAssetId && !operationId) {
+    let moderation = null;
+    try { moderation = await getAssetModerationStatus(String(directAssetId), apiKey); } catch {}
+    return {
+      status: "completed",
+      operationId: null,
+      assetId: String(directAssetId),
+      displayName: request.displayName,
+      assetType,
+      moderation
+    };
+  }
+
+  if (!operationId) {
+    throw new Error(`Roblox tidak mengembalikan operationId/assetId. Response: ${JSON.stringify(created)}`);
+  }
+
+  const interval = Math.max(1000, Number(process.env.ASSET_HUB_POLL_INTERVAL_MS || 2500));
+  const timeout = Math.max(interval, Number(process.env.ASSET_HUB_POLL_TIMEOUT_MS || 120000));
+  const started = Date.now();
+
+  while (Date.now() - started < timeout) {
+    await new Promise(resolve => setTimeout(resolve, interval));
+    const op = await robloxRequest(
+      `${API_BASE}/assets/v1/operations/${encodeURIComponent(operationId)}`,
+      { method: "GET", headers: { "x-api-key": apiKey } }
+    );
+
+    if (!op?.done) continue;
+    if (op?.error) {
+      throw new Error(
+        op.error?.message ||
+        op.error?.details?.[0]?.message ||
+        `Asset processing failed: ${JSON.stringify(op.error)}`
+      );
+    }
+
+    const assetId = op?.response?.assetId || op?.response?.asset?.assetId || op?.response?.asset?.id || op?.response?.id || null;
+    if (!assetId) throw new Error(`Operation selesai tetapi assetId tidak ditemukan. Response: ${JSON.stringify(op)}`);
+
+    let moderation = null;
+    try { moderation = await getAssetModerationStatus(String(assetId), apiKey); } catch {}
+
+    return {
+      status: "completed",
+      operationId,
+      assetId: String(assetId),
+      displayName: request.displayName,
+      assetType,
+      moderation
+    };
+  }
+
+  return {
+    status: "processing",
+    operationId,
+    displayName: request.displayName,
+    assetType
+  };
+}
+
+function installAssetHubRoute() {
+  if (express.application.__assetHubListenPatched) return;
+  express.application.__assetHubListenPatched = true;
+
+  const originalListen = express.application.listen;
+  express.application.listen = function patchedListen(...args) {
+    if (!this.__assetHubRouteInstalled) {
+      this.__assetHubRouteInstalled = true;
+
+      this.post("/api/assets/upload", assetUpload.single("file"), async (req, res) => {
+        let filePath = req.file?.path;
+        try {
+          const account = readAssetHubAccount();
+          if (!account) return res.status(503).json({ error: "Belum ada akun Roblox aktif. Atur API key + User ID di Music Lab." });
+          if (!req.file) return res.status(400).json({ error: "File wajib diupload." });
+
+          const assetType = String(req.body?.assetType || "");
+          const creatorType = String(req.body?.creatorType || "user").toLowerCase();
+          const groupId = creatorType === "group" ? String(req.body?.groupId || "").trim() : "";
+
+          if (creatorType === "group" && !/^\d+$/.test(groupId)) {
+            return res.status(400).json({ error: "Group ID wajib berupa angka." });
+          }
+
+          const result = await uploadAssetToRoblox({
+            filePath,
+            assetType,
+            displayName: req.body?.displayName,
+            description: req.body?.description,
+            userId: account.userId,
+            groupId,
+            apiKey: account.apiKey
+          });
+
+          return res.json({
+            ...result,
+            creatorType,
+            creatorId: groupId || String(account.userId),
+            assetUrl: result.assetId
+              ? `https://create.roblox.com/store/asset/${encodeURIComponent(result.assetId)}`
+              : null,
+            assetUri: result.assetId ? `rbxassetid://${result.assetId}` : null
+          });
+        } catch (error) {
+          console.error(`[Asset Hub] Upload failed: ${error?.message || error}`);
+          return res.status(400).json({ error: error?.message || "Asset upload gagal." });
+        } finally {
+          if (filePath) safeDeleteFile(filePath);
+        }
+      });
+    }
+
+    return originalListen.apply(this, args);
+  };
+}
+
+installAssetHubRoute();
