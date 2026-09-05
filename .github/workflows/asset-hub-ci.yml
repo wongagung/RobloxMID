@@ -30,7 +30,9 @@ jobs:
           node --check server/roblox.js
 
       - name: Syntax check Asset Hub frontend
-        run: node --check public/assets/app.js
+        run: |
+          node --check public/assets/app.js
+          node --check public/assets/pro-features.js
 
       - name: Validate Asset Hub HTML wiring
         run: |
@@ -38,6 +40,7 @@ jobs:
           import fs from 'node:fs';
           const html = fs.readFileSync('public/assets/index.html', 'utf8');
           const js = fs.readFileSync('public/assets/app.js', 'utf8');
+          const pro = fs.readFileSync('public/assets/pro-features.js', 'utf8');
           const requiredIds = [
             'fileInput','dropzone','typeGrid','assetName','creatorType','groupField',
             'description','advancedPanel','concurrency','duplicatePolicy','nameTemplate',
@@ -56,5 +59,17 @@ jobs:
             console.error('Expected UI handlers not referenced:', unwired.join(', '));
             process.exit(1);
           }
-          console.log('Asset Hub HTML/JS wiring OK');
+          const proFiles = ['pro-features.js','pro-features.css'];
+          const missingProWiring = proFiles.filter(file => !html.includes(`./${file}`));
+          if (missingProWiring.length) {
+            console.error('Missing Asset Hub Pro wiring:', missingProWiring.join(', '));
+            process.exit(1);
+          }
+          for (const marker of ['Smart Asset Scanner','Asset ID Toolbox','Asset Collections','Asset Health','Asset Analytics','Version Diff','Studio Snippets','PRO PIPELINE']) {
+            if (!pro.includes(marker) && !html.includes(marker)) {
+              console.error('Missing Asset Hub Pro feature marker:', marker);
+              process.exit(1);
+            }
+          }
+          console.log('Asset Hub HTML/JS/Pro wiring OK');
           NODE
