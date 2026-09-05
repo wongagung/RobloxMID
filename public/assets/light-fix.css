@@ -1,0 +1,60 @@
+/* Light theme compatibility: map the original theme variables to the light palette. */
+body.compact{
+  --bg:#eef2f7;
+  --surface:#ffffff;
+  --surface2:#f8fafc;
+  --surface3:#f1f4f8;
+  --line:#d9e0e8;
+  --line2:#c5ced9;
+  --text:#172230;
+  --muted:#697586;
+  --shadow:0 18px 44px rgba(35,50,70,.09);
+}
+
+body.compact .bulk-summary{
+  background:#d9e0e8;
+}
+body.compact .bulk-summary>div{
+  background:#f8fafc;
+  color:#172230;
+}
+body.compact .bulk-summary strong{color:#172230}
+body.compact .bulk-summary span,
+body.compact .bulk-summary small{color:#697586}
+
+body.compact .queue-list,
+body.compact .history-list{color:#172230}
+body.compact .queue-main strong,
+body.compact .history-main strong{color:#172230}
+body.compact .queue-main small,
+body.compact .history-main small,
+body.compact .queue-main em{color:#697586}
+body.compact .queue-main em{color:#c23b49}
+body.compact .history-type,
+body.compact .history-id{color:#697586}
+
+body.compact .inspector-card .empty-state,
+body.compact .empty-history,
+body.compact .inspector-loading,
+body.compact .inspector-muted,
+body.compact .inspector-subloading{color:#697586}
+body.compact .empty-history h3,
+body.compact .inspector-card .empty-state h3{color:#172230}
+
+body.compact .advanced-row{border-top-color:#d9e0e8;color:#697586}
+body.compact .field span{color:#4d5b6d}
+body.compact .field span i{color:#8490a0}
+body.compact .field small{color:#7a8797}
+
+body.compact .tool-list button{color:#465468}
+body.compact .tool-list b{color:#8390a1}
+body.compact .tool-list button:hover{background:#f5f7fb}
+
+body.compact .queue-progress i{
+  box-shadow:0 0 12px rgba(124,92,246,.18);
+}
+
+body.compact .modal-list button{background:#fff;color:#465468;border-color:#d9e0e8}
+body.compact .codebox textarea{background:#f7f9fc;color:#334155;border-color:#d9e0e8}
+
+body.compact #themeToggle{color:#5c4ab3;background:linear-gradient(135deg,#f0ebff,#eef5ff);border-color:#cfc5fa}
