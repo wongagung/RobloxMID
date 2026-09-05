@@ -1,0 +1,19 @@
+:root{--input-bg:var(--surface2);--input-border:var(--line);--input-focus:var(--accent);--input-placeholder:var(--muted)}
+input:not([type="file"]),textarea,select{box-sizing:border-box;width:100%;min-height:44px;border:1px solid var(--input-border);border-radius:12px;background:var(--input-bg);color:var(--text);font:inherit;line-height:1.45;padding:11px 13px;outline:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.025);transition:border-color .16s ease,box-shadow .16s ease,background .16s ease,transform .16s ease}
+textarea{min-height:104px;resize:vertical}
+select{appearance:none;padding-right:38px;background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);background-position:calc(100% - 17px) 19px,calc(100% - 12px) 19px;background-size:5px 5px,5px 5px;background-repeat:no-repeat;color:var(--text)}
+input:not([type="file"]):hover,textarea:hover,select:hover{border-color:var(--line2);background:var(--surface3)}
+input:not([type="file"]):focus,textarea:focus,select:focus{border-color:var(--input-focus);background:var(--surface);box-shadow:0 0 0 3px rgba(124,92,255,.11),inset 0 1px 0 rgba(255,255,255,.03)}
+input:not([type="file"])::placeholder,textarea::placeholder{color:var(--input-placeholder);opacity:.78}
+input:disabled,textarea:disabled,select:disabled{cursor:not-allowed;opacity:.58}
+.field input,.field textarea,.field select{min-width:0}
+.library-actions input{min-height:40px}
+.inspector-search input{min-height:44px}
+.pro-form-row input,.pro-form-row select{min-height:44px}
+.pro-output{scrollbar-width:thin}
+body.compact{--input-bg:#f8fafc;--input-border:#d9e0e8;--input-focus:#6c50e8;--input-placeholder:#7a8797}
+body.compact input:not([type="file"]),body.compact textarea,body.compact select{background:#f8fafc;color:#172230;box-shadow:inset 0 1px 0 rgba(255,255,255,.85)}
+body.compact input:not([type="file"]):hover,body.compact textarea:hover,body.compact select:hover{background:#fff;border-color:#bcc7d3}
+body.compact input:not([type="file"]):focus,body.compact textarea:focus,body.compact select:focus{background:#fff;box-shadow:0 0 0 3px rgba(108,80,232,.12),0 1px 3px rgba(35,50,70,.06)}
+body.compact input:not([type="file"])::placeholder,body.compact textarea::placeholder{color:#7a8797}
+@media(max-width:700px){input:not([type="file"]),textarea,select{min-height:42px;padding:10px 12px}.pro-form-row{gap:10px}}
