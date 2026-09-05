@@ -1,11 +1,11 @@
 {
   "name": "roblox-music-uploader",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js"
+    "start": "node --import ./server/asset-preload.js server/index.js",
+    "dev": "node --watch --import ./server/asset-preload.js server/index.js"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
