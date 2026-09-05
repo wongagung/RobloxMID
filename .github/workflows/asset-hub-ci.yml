@@ -1,0 +1,60 @@
+name: Asset Hub CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --omit=dev
+
+      - name: Syntax check backend
+        run: |
+          node --check server/asset-hub.js
+          node --check server/asset-preload.js
+          node --check server/index.js
+          node --check server/roblox.js
+
+      - name: Syntax check Asset Hub frontend
+        run: node --check public/assets/app.js
+
+      - name: Validate Asset Hub HTML wiring
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const html = fs.readFileSync('public/assets/index.html', 'utf8');
+          const js = fs.readFileSync('public/assets/app.js', 'utf8');
+          const requiredIds = [
+            'fileInput','dropzone','typeGrid','assetName','creatorType','groupField',
+            'description','advancedPanel','concurrency','duplicatePolicy','nameTemplate',
+            'uploadAll','queuePanel','queueList','retryFailed','pauseQueue','clearQueue',
+            'historyList','assetSearch','exportManifest','clearHistory','inspectorPanel',
+            'inspectorTitle','inspectorBody','modal','modalBody','modalClose','toast'
+          ];
+          const missing = requiredIds.filter(id => !new RegExp(`id=["']${id}["']`).test(html));
+          if (missing.length) {
+            console.error('Missing Asset Hub IDs:', missing.join(', '));
+            process.exit(1);
+          }
+          const expectedHandlers = ['uploadAll','retryFailed','clearQueue','pauseQueue','exportManifest','openInspectorTop','quickInspect','quickLua','quickManifest','newWorkspace','switchWorkspace'];
+          const unwired = expectedHandlers.filter(id => !js.includes(`$('${id}')`));
+          if (unwired.length) {
+            console.error('Expected UI handlers not referenced:', unwired.join(', '));
+            process.exit(1);
+          }
+          console.log('Asset Hub HTML/JS wiring OK');
+          NODE
