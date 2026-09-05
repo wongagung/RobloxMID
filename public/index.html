@@ -18,6 +18,7 @@
       <span><b>ROBLOX</b> MUSIC <em>LAB</em></span>
     </a>
     <div class="top-actions">
+      <a class="asset-hub-btn" href="/assets/" title="Roblox Asset Hub">📦 Asset Hub</a>
       <span class="time-pill" id="clockPill"><i class="clock-dot"></i><b id="clock">--:--:--</b></span>
       <span id="serverBadge" class="status-pill"><i></i> Checking...</span>
       <button id="themeBtn" class="icon-btn" title="Toggle theme">☼</button>
@@ -61,13 +62,11 @@
           <span id="limitLabel" class="muted">Max 20 MB</span>
         </div>
 
-        <!-- Source tabs -->
         <div class="source-tabs" role="tablist">
           <button class="source-tab active" data-source="file" title="Upload file">📁 File</button>
           <button class="source-tab" data-source="url" title="Dari URL">🔗 URL</button>
         </div>
 
-        <!-- File dropzone (default) -->
         <div id="sourceFile">
           <label id="dropzone" class="dropzone">
             <input id="fileInput" type="file" accept=".mp3,.wav,.ogg,.flac,audio/*">
@@ -78,7 +77,6 @@
           </label>
         </div>
 
-        <!-- URL source panel -->
         <div id="sourceUrl" class="hidden">
           <div class="url-panel">
             <div class="url-icon">🔗</div>
@@ -87,10 +85,7 @@
               <input id="urlInput" type="url" placeholder="https://youtube.com/watch?v=... atau link lainnya" autocomplete="off" spellcheck="false">
               <button id="urlInfoBtn" class="ghost-btn">Cek Info</button>
             </div>
-            <div id="urlStatus" class="url-status hidden">
-              <span id="urlStatusText">Mendownload...</span>
-            </div>
-            <!-- Metadata preview card (single video) -->
+            <div id="urlStatus" class="url-status hidden"><span id="urlStatusText">Mendownload...</span></div>
             <div id="urlPreviewCard" class="url-preview hidden">
               <img id="urlThumb" src="" alt="" class="url-thumb">
               <div class="url-meta">
@@ -100,54 +95,27 @@
               </div>
               <button id="urlFetchBtn" class="primary-btn url-dl-btn">⬇ Download & Pakai</button>
             </div>
-
-            <!-- Playlist preview -->
             <div id="playlistCard" class="playlist-card hidden">
               <div class="playlist-head">
-                <div>
-                  <div id="playlistTitle" class="playlist-title"></div>
-                  <div id="playlistMeta" class="playlist-meta"></div>
-                </div>
-                <div class="playlist-actions">
-                  <button id="playlistSelectAll" class="ghost-btn">Pilih Semua</button>
-                  <button id="playlistDownloadBtn" class="primary-btn" disabled>⬇ Download Terpilih</button>
-                </div>
+                <div><div id="playlistTitle" class="playlist-title"></div><div id="playlistMeta" class="playlist-meta"></div></div>
+                <div class="playlist-actions"><button id="playlistSelectAll" class="ghost-btn">Pilih Semua</button><button id="playlistDownloadBtn" class="primary-btn" disabled>⬇ Download Terpilih</button></div>
               </div>
               <div id="playlistItems" class="playlist-items"></div>
-              <div id="playlistProgress" class="playlist-progress hidden">
-                <div class="playlist-prog-bar-wrap">
-                  <div id="playlistProgBar" class="playlist-prog-bar" style="width:0%"></div>
-                </div>
-                <div id="playlistProgText" class="playlist-prog-text"></div>
-              </div>
+              <div id="playlistProgress" class="playlist-progress hidden"><div class="playlist-prog-bar-wrap"><div id="playlistProgBar" class="playlist-prog-bar" style="width:0%"></div></div><div id="playlistProgText" class="playlist-prog-text"></div></div>
             </div>
-            <!-- Cookies upload -->
             <details class="cookies-details">
               <summary>🍪 YouTube cookies (jika gagal karena bot detection)</summary>
               <div class="cookies-panel">
                 <p>Export cookies dari browser pakai ekstensi <b>Get cookies.txt LOCALLY</b>, lalu upload di sini.</p>
-                <div class="url-input-row">
-                  <input type="file" id="cookiesFileInput" accept=".txt" style="flex:1;padding:8px">
-                  <button id="cookiesUploadBtn" class="ghost-btn">Upload</button>
-                </div>
+                <div class="url-input-row"><input type="file" id="cookiesFileInput" accept=".txt" style="flex:1;padding:8px"><button id="cookiesUploadBtn" class="ghost-btn">Upload</button></div>
                 <div id="cookiesStatus" class="url-status hidden"><span id="cookiesStatusText"></span></div>
               </div>
             </details>
           </div>
         </div>
 
-        <div id="selected" class="selected hidden">
-          <div class="track-art">♫</div>
-          <div class="track-info">
-            <strong id="fileName">track.mp3</strong>
-            <span id="fileMeta">0 MB</span>
-          </div>
-          <button id="removeBtn" class="mini-btn">×</button>
-        </div>
-
-        <div id="previewBox" class="preview hidden">
-          <audio id="audio" controls></audio>
-        </div>
+        <div id="selected" class="selected hidden"><div class="track-art">♫</div><div class="track-info"><strong id="fileName">track.mp3</strong><span id="fileMeta">0 MB</span></div><button id="removeBtn" class="mini-btn">×</button></div>
+        <div id="previewBox" class="preview hidden"><audio id="audio" controls></audio></div>
 
         <div class="field">
           <label>Roblox asset name</label>
@@ -155,223 +123,34 @@
           <span id="assetNameHint" class="muted">3–50 karakter</span>
         </div>
 
-
         <div id="advancedEditor" class="advanced-editor-card">
-          <div class="editor-head">
-            <div>
-              <h3 id="editorTrackName">🎚 Advanced Sound Studio</h3>
-              <p>Edit audio before Roblox upload</p>
-            </div>
-            <span id="editorStatus">Waiting audio...</span>
-          </div>
-
-          <div class="editor-tabs" role="tablist">
-            <button class="tab-btn active" data-tab="trim" title="Pangkas">✂ <span>Pangkas</span></button>
-            <button class="tab-btn" data-tab="volume" title="Volume">🔊</button>
-            <button class="tab-btn" data-tab="speed" title="Speed">⏱</button>
-            <button class="tab-btn" data-tab="pitch" title="Pitch">〰</button>
-            <button class="tab-btn" data-tab="eq" title="Equalizer">▤</button>
-            <button class="tab-btn" data-tab="reverb" title="Reverb">🌊</button>
-            <button class="tab-btn" data-tab="stereo" title="Stereo">⟺</button>
-          </div>
-
-          <div class="editor-visual">
-            <div class="wave-wrap" id="waveWrap">
-              <canvas id="editorWave" class="wave-canvas" height="90"></canvas>
-              <canvas id="editorSpectrum" class="spectrum-canvas" height="30"></canvas>
-              <div class="wave-watermark" id="waveWatermark"></div>
-              <div class="playhead" id="playhead"></div>
-              <div class="trim-dim trim-dim-left" id="trimDimLeft"></div>
-              <div class="trim-dim trim-dim-right" id="trimDimRight"></div>
-              <div class="trim-handle trim-handle-left" id="trimHandleLeft"></div>
-              <div class="trim-handle trim-handle-right" id="trimHandleRight"></div>
-            </div>
-            <div class="wave-times">
-              <span id="waveTimeStart">00:00.0</span>
-              <span id="waveTimeCursor">00:00.0</span>
-              <span id="waveTimeEnd">00:00.0</span>
-            </div>
-          </div>
-
-          <div class="tab-panel" data-panel="trim">
-            <p class="tab-hint">Geser gagang biru di ujung waveform buat pangkas awal/akhir lagu.</p>
-          </div>
-
-          <div class="tab-panel hidden" data-panel="volume">
-            <label class="big-slider">
-              <span class="editor-label-row"><span>Volume</span>
-                <span class="value-input-wrap"><input id="editorGainVal" type="number" step="0.01" min="-20" max="20" value="0.00" disabled><i>dB</i></span>
-              </span>
-              <input id="editorGain" type="range" min="-20" max="20" step="0.01" value="0" disabled>
-            </label>
-          </div>
-
-          <div class="tab-panel hidden" data-panel="speed">
-            <label class="big-slider">
-              <span class="editor-label-row"><span>Speed</span>
-                <span class="value-input-wrap"><input id="editorSpeedVal" type="number" step="0.01" min="0.5" max="2" value="1.00" disabled><i>x</i></span>
-              </span>
-              <input id="editorSpeed" type="range" min="0.5" max="2" step="0.01" value="1" disabled>
-            </label>
-          </div>
-
-          <div class="tab-panel hidden" data-panel="pitch">
-            <label class="big-slider">
-              <span class="editor-label-row"><span>Pitch</span>
-                <span class="value-input-wrap"><input id="editorPitchVal" type="number" step="1" min="-12" max="12" value="0" disabled><i>semitone</i></span>
-              </span>
-              <input id="editorPitch" type="range" min="-12" max="12" step="1" value="0" disabled>
-            </label>
-          </div>
-
-          <div class="tab-panel hidden" data-panel="eq">
-            <div class="eq-presets" id="eqPresets"></div>
-            <div class="eq-bands" id="eqBands"></div>
-          </div>
-
-          <div class="tab-panel hidden" data-panel="reverb">
-            <label class="big-slider">
-              <span class="editor-label-row"><span>Reverb Mix</span>
-                <span class="value-input-wrap"><input id="editorReverbVal" type="number" step="1" min="0" max="100" value="0" disabled><i>%</i></span>
-              </span>
-              <input id="editorReverb" type="range" min="0" max="100" step="1" value="0" disabled>
-            </label>
-            <label class="big-slider">
-              <span class="editor-label-row"><span>Room Size</span>
-                <span class="value-input-wrap"><input id="editorRoomVal" type="number" step="1" min="0" max="100" value="50" disabled><i>%</i></span>
-              </span>
-              <input id="editorRoom" type="range" min="0" max="100" step="1" value="50" disabled>
-            </label>
-          </div>
-
-          <div class="tab-panel hidden" data-panel="stereo">
-            <label class="big-slider">
-              <span class="editor-label-row"><span>Stereo Width</span>
-                <span class="value-input-wrap"><input id="editorStereoVal" type="number" step="1" min="-100" max="100" value="0" disabled><i>%</i></span>
-              </span>
-              <input id="editorStereo" type="range" min="-100" max="100" step="1" value="0" disabled>
-            </label>
-            <p class="tab-hint">Negatif = lebih mono, Positif = lebih lebar, 0 = original</p>
-          </div>
-
-          <div class="editor-common">
-            <div class="fade-row">
-              <label class="fade-chk"><input type="checkbox" id="fadeInChk" disabled> Fade In
-                <input type="number" id="editorFadeInVal" min="0" max="30" step="0.5" value="3" disabled> sec</label>
-              <label class="fade-chk"><input type="checkbox" id="fadeOutChk" disabled> Fade Out
-                <input type="number" id="editorFadeOutVal" min="0" max="30" step="0.5" value="3" disabled> sec</label>
-            </div>
-            <div class="transport-row">
-              <button id="editorPlay" class="play-btn" disabled>▶</button>
-              <span id="trimRangeLabel" class="trim-range-label">00:00.0 — 00:00.0</span>
-              <span class="spacer"></span>
-              <button id="editorApply" class="ghost-btn" disabled>Save</button>
-              <button id="editorReset" class="ghost-btn" disabled>↺ Reset</button>
-            </div>
-          </div>
+          <div class="editor-head"><div><h3 id="editorTrackName">🎚 Advanced Sound Studio</h3><p>Edit audio before Roblox upload</p></div><span id="editorStatus">Waiting audio...</span></div>
+          <div class="editor-tabs" role="tablist"><button class="tab-btn active" data-tab="trim" title="Pangkas">✂ <span>Pangkas</span></button><button class="tab-btn" data-tab="volume" title="Volume">🔊</button><button class="tab-btn" data-tab="speed" title="Speed">⏱</button><button class="tab-btn" data-tab="pitch" title="Pitch">〰</button><button class="tab-btn" data-tab="eq" title="Equalizer">▤</button><button class="tab-btn" data-tab="reverb" title="Reverb">🌊</button><button class="tab-btn" data-tab="stereo" title="Stereo">⟺</button></div>
+          <div class="editor-visual"><div class="wave-wrap" id="waveWrap"><canvas id="editorWave" class="wave-canvas" height="90"></canvas><canvas id="editorSpectrum" class="spectrum-canvas" height="30"></canvas><div class="wave-watermark" id="waveWatermark"></div><div class="playhead" id="playhead"></div><div class="trim-dim trim-dim-left" id="trimDimLeft"></div><div class="trim-dim trim-dim-right" id="trimDimRight"></div><div class="trim-handle trim-handle-left" id="trimHandleLeft"></div><div class="trim-handle trim-handle-right" id="trimHandleRight"></div></div><div class="wave-times"><span id="waveTimeStart">00:00.0</span><span id="waveTimeCursor">00:00.0</span><span id="waveTimeEnd">00:00.0</span></div></div>
+          <div class="tab-panel" data-panel="trim"><p class="tab-hint">Geser gagang biru di ujung waveform buat pangkas awal/akhir lagu.</p></div>
+          <div class="tab-panel hidden" data-panel="volume"><label class="big-slider"><span class="editor-label-row"><span>Volume</span><span class="value-input-wrap"><input id="editorGainVal" type="number" step="0.01" min="-20" max="20" value="0.00" disabled><i>dB</i></span></span><input id="editorGain" type="range" min="-20" max="20" step="0.01" value="0" disabled></label></div>
+          <div class="tab-panel hidden" data-panel="speed"><label class="big-slider"><span class="editor-label-row"><span>Speed</span><span class="value-input-wrap"><input id="editorSpeedVal" type="number" step="0.01" min="0.5" max="2" value="1.00" disabled><i>x</i></span></span><input id="editorSpeed" type="range" min="0.5" max="2" step="0.01" value="1" disabled></label></div>
+          <div class="tab-panel hidden" data-panel="pitch"><label class="big-slider"><span class="editor-label-row"><span>Pitch</span><span class="value-input-wrap"><input id="editorPitchVal" type="number" step="1" min="-12" max="12" value="0" disabled><i>semitone</i></span></span><input id="editorPitch" type="range" min="-12" max="12" step="1" value="0" disabled></label></div>
+          <div class="tab-panel hidden" data-panel="eq"><div class="eq-presets" id="eqPresets"></div><div class="eq-bands" id="eqBands"></div></div>
+          <div class="tab-panel hidden" data-panel="reverb"><label class="big-slider"><span class="editor-label-row"><span>Reverb Mix</span><span class="value-input-wrap"><input id="editorReverbVal" type="number" step="1" min="0" max="100" value="0" disabled><i>%</i></span></span><input id="editorReverb" type="range" min="0" max="100" step="1" value="0" disabled></label><label class="big-slider"><span class="editor-label-row"><span>Room Size</span><span class="value-input-wrap"><input id="editorRoomVal" type="number" step="1" min="0" max="100" value="50" disabled><i>%</i></span></span><input id="editorRoom" type="range" min="0" max="100" step="1" value="50" disabled></label></div>
+          <div class="tab-panel hidden" data-panel="stereo"><label class="big-slider"><span class="editor-label-row"><span>Stereo Width</span><span class="value-input-wrap"><input id="editorStereoVal" type="number" step="1" min="-100" max="100" value="0" disabled><i>%</i></span></span><input id="editorStereo" type="range" min="-100" max="100" step="1" value="0" disabled></label><p class="tab-hint">Negatif = lebih mono, Positif = lebih lebar, 0 = original</p></div>
+          <div class="editor-common"><div class="fade-row"><label class="fade-chk"><input type="checkbox" id="fadeInChk" disabled> Fade In <input type="number" id="editorFadeInVal" min="0" max="30" step="0.5" value="3" disabled> sec</label><label class="fade-chk"><input type="checkbox" id="fadeOutChk" disabled> Fade Out <input type="number" id="editorFadeOutVal" min="0" max="30" step="0.5" value="3" disabled> sec</label></div><div class="transport-row"><button id="editorPlay" class="play-btn" disabled>▶</button><span id="trimRangeLabel" class="trim-range-label">00:00.0 — 00:00.0</span><span class="spacer"></span><button id="editorApply" class="ghost-btn" disabled>Save</button><button id="editorReset" class="ghost-btn" disabled>↺ Reset</button></div></div>
         </div>
 
-        <button id="uploadBtn" class="primary-btn" disabled>
-          <span>Upload & process</span><b>→</b>
-        </button>
-
-        <div id="progressWrap" class="progress-wrap hidden">
-          <div class="progress-label"><span id="progressText">Uploading...</span><span id="progressPct">0%</span></div>
-          <div class="progress"><i id="progressBar"></i></div>
-        </div>
+        <button id="uploadBtn" class="primary-btn" disabled><span>Upload & process</span><b>→</b></button>
+        <div id="progressWrap" class="progress-wrap hidden"><div class="progress-label"><span id="progressText">Uploading...</span><span id="progressPct">0%</span></div><div class="progress"><i id="progressBar"></i></div></div>
       </div>
 
       <aside class="panel status-panel">
         <div class="panel-head"><div><h2>Services</h2><p>Connection status</p></div></div>
-        <div class="service" id="robloxService">
-          <div class="service-logo">R</div>
-          <div style="flex:1"><strong>Roblox Open Cloud</strong><span id="robloxText">Checking...</span></div>
-          <button id="manageAccountsBtn" class="icon-btn" title="Kelola akun Roblox">⚙</button>
-          <i class="dot"></i>
-        </div>
-
-        <!-- Account manager drawer -->
-        <div id="accountDrawer" class="account-drawer hidden">
-          <div class="account-drawer-head">
-            <span>Akun Roblox</span>
-            <button id="accountDrawerClose" class="icon-btn">✕</button>
-          </div>
-          <div id="accountList" class="account-list"></div>
-          <form id="addAccountForm" class="add-account-form">
-            <div class="add-account-title">+ Tambah Akun</div>
-            <input id="accLabel"  type="text"     placeholder="Label (contoh: Akun Utama)" required>
-            <input id="accUserId" type="text"     placeholder="User ID (angka)" required>
-            <input id="accApiKey" type="password" placeholder="API Key (Open Cloud)" required>
-            <button type="submit" class="primary-btn" style="margin-top:4px">Simpan</button>
-          </form>
-          <div id="accFormStatus" class="url-status hidden"></div>
-        </div>
-        <div class="service" id="telegramService">
-          <div class="service-logo tg">✈</div><div><strong>Telegram</strong><span id="telegramText">Checking...</span></div><i class="dot"></i>
-        </div>
-        <div class="service" id="ytdlpService">
-          <div class="service-logo yt">▶</div>
-          <div style="flex:1">
-            <strong>yt-dlp (URL source)</strong>
-            <span id="ytdlpText">Checking...</span>
-          </div>
-          <button id="ytdlpUpdateBtn" class="icon-btn" title="Update yt-dlp" style="display:none">↑</button>
-          <i class="dot"></i>
-        </div>
-        <!-- Update log -->
-        <div id="ytdlpUpdateLog" class="update-log hidden"></div>
-        <div class="tip"><b>Storage</b><p>File di server hanya sementara. Setelah diproses, file lokal otomatis dihapus. Telegram menjadi penyimpanan salinan audio.</p></div>
-        <div class="tip roblox-optimize-tip">
-          <b>🎲 Roblox Optimization</b>
-          <p>Setiap upload otomatis: mono 44100Hz 128kbps + strip metadata.</p>
-          <div class="vary-toggle-row">
-            <span>Micro-variation (bypass fingerprint)</span>
-            <button id="autoVaryToggle" class="vary-toggle" title="Toggle micro-variation">...</button>
-          </div>
-        </div>
+        <div class="service" id="robloxService"><div class="service-logo">R</div><div style="flex:1"><strong>Roblox Open Cloud</strong><span id="robloxText">Checking...</span></div><button id="manageAccountsBtn" class="icon-btn" title="Kelola akun Roblox">⚙</button><i class="dot"></i></div>
+        <div class="service" id="telegramService"><div class="service-logo tg">✈</div><div style="flex:1"><strong>Telegram</strong><span id="telegramText">Checking...</span></div><i class="dot"></i></div>
+        <div class="tip"><b>TIP</b><p>Gunakan <code>Asset Hub</code> di kanan atas untuk asset selain audio seperti Image, Decal, Model, Mesh, Animation dan Video.</p></div>
       </aside>
-    </section>
-
-    <!-- Download Queue Panel -->
-    <section class="panel queue-panel hidden" id="queuePanel">
-      <div class="panel-head">
-        <div><h2>⏳ Antrian Download</h2><p>Track siap diedit sebelum upload ke Roblox</p></div>
-        <button id="queueClearBtn" class="ghost-btn">🗑 Kosongkan</button>
-      </div>
-      <div id="queueEmpty" class="empty"><span>📭</span><h3>Antrian kosong</h3><p>Download playlist untuk mulai mengisi antrian.</p></div>
-      <div id="queueList" class="queue-list"></div>
-    </section>
-
-    <section class="panel library-panel">
-      <div class="panel-head">
-        <div><h2>Recent tracks</h2><p>Your latest uploads and asset IDs</p></div>
-        <div style="display:flex;gap:6px">
-          <a id="exportCsvBtn" href="/api/history/export/csv" download class="ghost-btn" title="Export ke CSV">⬇ CSV</a>
-          <button id="refreshBtn" class="ghost-btn">↻ Refresh</button>
-        </div>
-      </div>
-      <!-- Filter & Search bar -->
-      <div class="library-controls">
-        <div class="lib-search-wrap">
-          <span class="lib-search-icon">⌕</span>
-          <input id="libSearch" type="search" placeholder="Cari nama track..." autocomplete="off">
-        </div>
-        <div class="lib-filters">
-          <button class="lib-filter active" data-filter="all">Semua</button>
-          <button class="lib-filter" data-filter="approved">✓ Approved</button>
-          <button class="lib-filter" data-filter="rejected">✕ Rejected</button>
-          <button class="lib-filter" data-filter="reviewing">🛡 Review</button>
-        </div>
-      </div>
-      <div id="empty" class="empty"><span>♫</span><h3>No tracks yet</h3><p>Upload your first track to start building your library.</p></div>
-      <div id="libEmpty2" class="empty hidden"><span>🔍</span><h3>Tidak ada hasil</h3><p>Coba ubah filter atau kata kunci pencarian.</p></div>
-      <div id="library" class="library"></div>
     </section>
   </main>
 
-  <div id="toast" class="toast"></div>
-  <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.0/lame.min.js"></script>
+  <div id="toast" class="toast"><span id="toastText"></span></div>
   <script src="/app.js"></script>
-  <script src="/audio-studio.js"></script>
 </body>
 </html>
