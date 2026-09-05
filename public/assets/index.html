@@ -7,6 +7,7 @@
   <title>Roblox Asset Hub</title>
   <meta name="description" content="Universal Roblox asset upload workspace.">
   <link rel="stylesheet" href="./style.css">
+  <link rel="stylesheet" href="./multi.css">
 </head>
 <body>
   <div class="ambient ambient-a"></div>
@@ -53,57 +54,34 @@
           <div>
             <div class="kicker">UPLOAD CENTER</div>
             <h2>Create asset</h2>
-            <p>Choose a type and drop your source file.</p>
+            <p>Choose a type and drop one or many source files.</p>
           </div>
-          <div class="limit-badge">MAX 20 MB</div>
+          <div class="limit-badge">MAX 20 MB / FILE</div>
         </div>
 
         <div class="type-grid" id="typeGrid">
-          <button class="type-card active" data-type="image">
-            <span class="type-icon">▧</span><span><b>Image</b><small>PNG · JPG · BMP · TGA</small></span>
-          </button>
-          <button class="type-card" data-type="decal">
-            <span class="type-icon">◈</span><span><b>Decal</b><small>Image texture</small></span>
-          </button>
-          <button class="type-card" data-type="model">
-            <span class="type-icon">◇</span><span><b>Model</b><small>3D asset</small></span>
-          </button>
-          <button class="type-card" data-type="mesh">
-            <span class="type-icon">△</span><span><b>Mesh</b><small>3D geometry</small></span>
-          </button>
-          <button class="type-card" data-type="animation">
-            <span class="type-icon">◎</span><span><b>Animation</b><small>Rig animation</small></span>
-          </button>
-          <button class="type-card" data-type="audio">
-            <span class="type-icon">♫</span><span><b>Audio</b><small>MP3 · WAV · OGG</small></span>
-          </button>
-          <button class="type-card" data-type="video">
-            <span class="type-icon">▶</span><span><b>Video</b><small>MP4 · MOV</small></span>
-          </button>
+          <button class="type-card active" data-type="image"><span class="type-icon">▧</span><span><b>Image</b><small>PNG · JPG · BMP · TGA</small></span></button>
+          <button class="type-card" data-type="decal"><span class="type-icon">◈</span><span><b>Decal</b><small>Image texture</small></span></button>
+          <button class="type-card" data-type="model"><span class="type-icon">◇</span><span><b>Model</b><small>3D asset</small></span></button>
+          <button class="type-card" data-type="mesh"><span class="type-icon">△</span><span><b>Mesh</b><small>Delivery mesh</small></span></button>
+          <button class="type-card" data-type="animation"><span class="type-icon">◎</span><span><b>Animation</b><small>RBXM · RBXMX</small></span></button>
+          <button class="type-card" data-type="audio"><span class="type-icon">♫</span><span><b>Audio</b><small>MP3 · WAV · OGG</small></span></button>
+          <button class="type-card" data-type="video"><span class="type-icon">▶</span><span><b>Video</b><small>MP4 · MOV</small></span></button>
         </div>
 
         <label class="dropzone" id="dropzone">
-          <input id="fileInput" type="file" hidden>
+          <input id="fileInput" type="file" hidden multiple>
           <div class="drop-icon">↑</div>
-          <h3 id="dropTitle">Drop your image here</h3>
-          <p>or <u>browse from your computer</u></p>
-          <div class="drop-meta" id="dropMeta">PNG · JPG · BMP · TGA · up to 20 MB</div>
+          <h3 id="dropTitle">Drop your image files here</h3>
+          <p>or <u>browse multiple files</u> from your computer</p>
+          <div class="drop-meta" id="dropMeta">PNG · JPG · BMP · TGA · under 8000×8000</div>
         </label>
-
-        <div class="selected-file hidden" id="selectedFile">
-          <div class="file-icon" id="fileIcon">▧</div>
-          <div class="file-info">
-            <strong id="fileName">asset.png</strong>
-            <span id="fileMeta">0 MB</span>
-          </div>
-          <button class="remove-btn" id="removeFile" type="button">×</button>
-        </div>
 
         <div class="form-grid">
           <label class="field">
-            <span>Asset name</span>
+            <span>Asset name prefix</span>
             <input id="assetName" maxlength="50" placeholder="e.g. Neon Logo 2026">
-            <small id="nameHint">3–50 characters</small>
+            <small id="nameHint">3–50 characters · applied to every selected file</small>
           </label>
           <label class="field">
             <span>Creator</span>
@@ -114,17 +92,17 @@
           </label>
           <label class="field full">
             <span>Description <i>optional</i></span>
-            <textarea id="description" maxlength="1000" rows="3" placeholder="What is this asset for?"></textarea>
+            <textarea id="description" maxlength="1000" rows="3" placeholder="What are these assets for?"></textarea>
           </label>
         </div>
 
         <div class="notice">
           <span>✦</span>
-          <p><b>Moderation is handled by Roblox.</b> Upload completion means the asset was created; it may still be under review.</p>
+          <p><b>Batch upload, one Roblox operation per file.</b> Files run through a small controlled queue so a large batch does not flood Roblox.</p>
         </div>
 
         <button class="upload-btn" id="uploadBtn" disabled>
-          <span id="uploadBtnText">Select a file to continue</span><b>→</b>
+          <span id="uploadBtnText">Select files to continue</span><b>→</b>
         </button>
         <div class="progress hidden" id="progressWrap">
           <div class="progress-top"><span id="progressText">Preparing upload...</span><b id="progressPct">0%</b></div>
@@ -135,11 +113,11 @@
       <aside class="side-stack">
         <div class="panel quick-panel">
           <div class="kicker">WORKFLOW</div>
-          <h3>Simple by design.</h3>
+          <h3>Batch it.</h3>
           <div class="workflow">
-            <div><span>01</span><p><b>Pick a type</b><small>Image, model, audio and more.</small></p></div>
-            <div><span>02</span><p><b>Drop your file</b><small>We validate format and size.</small></p></div>
-            <div><span>03</span><p><b>Publish to Roblox</b><small>Track operation and moderation.</small></p></div>
+            <div><span>01</span><p><b>Pick a type</b><small>All selected files use the chosen asset type.</small></p></div>
+            <div><span>02</span><p><b>Drop many files</b><small>Review the queue before publishing.</small></p></div>
+            <div><span>03</span><p><b>Upload all</b><small>Each asset gets its own ID and status.</small></p></div>
           </div>
         </div>
 
