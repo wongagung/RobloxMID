@@ -73,5 +73,11 @@ export async function uploadGenericAsset({ filePath, originalName, assetType, di
   if(directAssetId) return {status:"completed",assetId:String(directAssetId),operationId:null};
   return waitForOperation(operationId,apiKey);
 }
-export async function getGenericAsset(assetId, apiKey){return robloxRequest(`${API_BASE}/assets/v1/assets/${encodeURIComponent(assetId)}`,{headers:{"x-api-key":apiKey}})}
-export const ASSET_HUB_TYPES=TYPES; export const ASSET_HUB_MAX_BYTES=MAX_BYTES;
+
+export async function getGenericAsset(assetId, apiKey, readMask = "description,displayName,creationContext,revisionId,revisionCreateTime,moderationResult,icon,previews,state") {
+  const params = new URLSearchParams({ readMask });
+  return robloxRequest(`${API_BASE}/assets/v1/assets/${encodeURIComponent(assetId)}?${params.toString()}`, { headers:{"x-api-key":apiKey} });
+}
+
+export const ASSET_HUB_TYPES=TYPES;
+export const ASSET_HUB_MAX_BYTES=MAX_BYTES;
