@@ -1,192 +1,23 @@
-const TYPES = {
-  image: {label:'Image', icon:'▧', assetType:'Image', accept:'.png,.jpg,.jpeg,.bmp,.tga,image/png,image/jpeg,image/bmp,image/tga', formats:'PNG · JPG · BMP · TGA · under 8000×8000'},
-  decal: {label:'Decal', icon:'◈', assetType:'Decal', accept:'.png,.jpg,.jpeg,.bmp,.tga,image/png,image/jpeg,image/bmp,image/tga', formats:'PNG · JPG · BMP · TGA · under 8000×8000'},
-  model: {label:'Model', icon:'◇', assetType:'Model', accept:'.fbx,.gltf,.glb,.rbxm,.rbxmx,model/gltf+json,model/gltf-binary,model/x-rbxm', formats:'FBX · GLTF · GLB · RBXM · RBXMX · 20 MB'},
-  mesh: {label:'Mesh', icon:'△', assetType:'Mesh', accept:'.mesh', formats:'Roblox-delivery mesh only · not normal file import'},
-  animation: {label:'Animation', icon:'◎', assetType:'Animation', accept:'.rbxm,.rbxmx,model/x-rbxm', formats:'RBXM · RBXMX · 20 MB'},
-  audio: {label:'Audio', icon:'♫', assetType:'Audio', accept:'.mp3,.wav,.ogg,.flac,audio/mpeg,audio/wav,audio/ogg,audio/flac', formats:'MP3 · WAV · OGG · FLAC · 20 MB'},
-  video: {label:'Video', icon:'▶', assetType:'Video', accept:'.mp4,.mov,video/mp4,video/quicktime', formats:'MP4 · MOV · current UI limit 20 MB'}
-};
-
-const state = { type:'image', files:[], uploading:false };
-const $ = id => document.getElementById(id);
-const typeButtons = [...document.querySelectorAll('.type-card')];
-const fileInput = $('fileInput');
-const dropzone = $('dropzone');
-fileInput.multiple = true;
-
-function humanSize(bytes){
-  if(bytes < 1024) return `${bytes} B`;
-  if(bytes < 1024**2) return `${(bytes/1024).toFixed(1)} KB`;
-  if(bytes < 1024**3) return `${(bytes/1024**2).toFixed(2)} MB`;
-  return `${(bytes/1024**3).toFixed(2)} GB`;
-}
-function esc(v){ return String(v ?? '').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c])); }
-function toast(message, kind=''){
-  const el=$('toast'); el.textContent=message; el.className=`toast ${kind} show`;
-  clearTimeout(toast.timer); toast.timer=setTimeout(()=>el.className='toast',3200);
-}
-function setProgress(p,text){
-  $('progressWrap').classList.remove('hidden');
-  $('progressBar').style.width=`${Math.max(0,Math.min(100,p))}%`;
-  $('progressPct').textContent=`${Math.round(p)}%`;
-  $('progressText').textContent=text;
-}
-function clearProgress(){ $('progressWrap').classList.add('hidden'); }
-
-function injectMultiUi(){
-  const selected=$('selectedFile'); if(selected) selected.remove();
-  const queue=document.createElement('div'); queue.id='multiQueue'; queue.className='multi-queue';
-  queue.innerHTML=`<div class="queue-head"><div><strong id="queueCount">0 files selected</strong><span id="queueSummary">Add multiple files and upload them together.</span></div><button type="button" class="ghost-small" id="clearQueue">Clear</button></div><div id="queueItems" class="queue-items"></div>`;
-  dropzone.after(queue);
-  const groupRow=document.createElement('label'); groupRow.className='field full hidden'; groupRow.id='groupField';
-  groupRow.innerHTML=`<span>Group ID</span><input id="groupId" inputmode="numeric" placeholder="e.g. 123456789"><small>Required only when Creator is Group.</small>`;
-  $('description').closest('.field').before(groupRow);
-  $('clearQueue').addEventListener('click',clearFiles);
-  $('creatorType').addEventListener('change',()=>{$('groupField').classList.toggle('hidden',$('creatorType').value!=='group');});
-}
-
-function updateType(type){
-  state.type=type; const cfg=TYPES[type];
-  typeButtons.forEach(btn=>btn.classList.toggle('active',btn.dataset.type===type));
-  fileInput.accept=cfg.accept;
-  $('dropTitle').textContent=`Drop your ${cfg.label.toLowerCase()} files here`;
-  $('dropMeta').textContent=cfg.formats;
-  if(type==='mesh') toast('Mesh tidak menerima file FBX/OBJ biasa lewat Create Asset API; pilih Model untuk upload 3D.','error');
-  renderQueue(); updateButton();
-}
-
-function fileAllowed(file){
-  const cfg=TYPES[state.type], ext='.'+(file.name.split('.').pop()||'').toLowerCase(), mime=String(file.type||'').toLowerCase();
-  return cfg.accept.toLowerCase().split(',').some(v=>v.trim()===ext || (mime && v.trim()===mime));
-}
-function addFiles(fileList){
-  const incoming=[...(fileList||[])]; if(!incoming.length) return;
-  let rejected=0;
-  for(const file of incoming){
-    if(state.type==='mesh' || !fileAllowed(file) || file.size>20*1024*1024){rejected++;continue;}
-    const key=`${file.name}:${file.size}:${file.lastModified}`;
-    if(state.files.some(x=>x.key===key)) continue;
-    state.files.push({key,file,status:'queued',percent:0,result:null,error:null});
-  }
-  if(rejected) toast(`${rejected} file ditolak karena format/ukuran tidak cocok.`,'error');
-  renderQueue(); updateButton();
-}
-function clearFiles(){
-  if(state.uploading) return;
-  state.files=[]; fileInput.value=''; renderQueue(); updateButton();
-}
-function removeFile(key){
-  if(state.uploading) return;
-  state.files=state.files.filter(x=>x.key!==key); renderQueue(); updateButton();
-}
-function renderQueue(){
-  const list=$('queueItems'); if(!list) return;
-  $('queueCount').textContent=`${state.files.length} file${state.files.length===1?'':'s'} selected`;
-  const done=state.files.filter(x=>x.status==='done'||x.status==='processing').length, failed=state.files.filter(x=>x.status==='error').length;
-  $('queueSummary').textContent=state.uploading?`${done} completed · ${failed} failed · uploads in progress`:(state.files.length?'Ready to upload as a batch.':'Add multiple files and upload them together.');
-  list.innerHTML=state.files.map(item=>{
-    const icon=TYPES[state.type]?.icon||'◇';
-    const statusText=item.status==='done'?'Completed':item.status==='processing'?'Processing':item.status==='error'?'Failed':item.status==='uploading'?`Uploading ${item.percent}%`:'Queued';
-    const assetId=item.result?.assetId, link=item.result?.assetUrl || (assetId?`https://create.roblox.com/store/asset/${encodeURIComponent(assetId)}`:'');
-    return `<div class="queue-item ${item.status}"><div class="queue-item-icon">${icon}</div><div class="queue-item-main"><strong title="${esc(item.file.name)}">${esc(item.file.name)}</strong><small>${humanSize(item.file.size)} · ${statusText}</small>${item.error?`<em>${esc(item.error)}</em>`:''}</div><div class="queue-progress"><i style="width:${Math.max(0,item.percent)}%"></i></div><div class="queue-actions">${assetId?`<button type="button" class="queue-link" data-link="${esc(link)}">Open</button><button type="button" class="queue-copy" data-id="${esc(assetId)}">Copy ID</button>`:''}${!state.uploading&&item.status!=='done'&&item.status!=='processing'?`<button type="button" class="queue-remove" data-key="${esc(item.key)}">×</button>`:''}</div></div>`;
-  }).join('');
-  document.querySelectorAll('.queue-remove').forEach(btn=>btn.addEventListener('click',()=>removeFile(btn.dataset.key)));
-  document.querySelectorAll('.queue-copy').forEach(btn=>btn.addEventListener('click',()=>copyId(btn.dataset.id)));
-  document.querySelectorAll('.queue-link').forEach(btn=>btn.addEventListener('click',()=>window.open(btn.dataset.link,'_blank','noopener')));
-}
-function copyId(id){
-  if(!id) return;
-  navigator.clipboard?.writeText(id).then(()=>toast('Asset ID copied.','success')).catch(()=>toast(id));
-}
-function baseName(fileName){ return fileName.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').replace(/\s+/g,' ').trim(); }
-function makeDisplayName(file){
-  const prefix=$('assetName').value.trim();
-  const name=baseName(file.name) || 'Asset';
-  if(!prefix) return name.slice(0,50);
-  if(state.files.length===1) return prefix.slice(0,50);
-  const combined=`${prefix} - ${name}`.trim();
-  return combined.slice(0,50).trim();
-}
-function updateButton(){
-  const name=$('assetName').value.trim(), validName=name.length>=3&&name.length<=50;
-  $('nameHint').classList.toggle('error',name.length>0&&!validName);
-  $('uploadBtn').disabled=!(state.files.length&&validName&&!state.uploading);
-  $('uploadBtnText').textContent=state.files.length?`Upload ${state.files.length} asset${state.files.length===1?'':'s'} to Roblox`:'Select files to continue';
-}
-async function uploadOne(item){
-  item.status='uploading'; item.percent=8; renderQueue();
-  const form=new FormData();
-  form.append('file',item.file,item.file.name);
-  form.append('assetType',TYPES[state.type].assetType);
-  form.append('displayName',makeDisplayName(item.file));
-  form.append('description',$('description').value.trim());
-  form.append('creatorType',$('creatorType').value);
-  if($('creatorType').value==='group') form.append('groupId',$('groupId').value.trim());
-  try{
-    item.percent=25; renderQueue();
-    const response=await fetch('/api/assets/upload',{method:'POST',body:form});
-    item.percent=72; renderQueue();
-    const data=await response.json().catch(()=>({}));
-    if(!response.ok) throw new Error(data.error||data.message||`HTTP ${response.status}`);
-    item.percent=100; item.result=data;
-    item.status=data.status==='processing'?'processing':'done';
-    addHistory({type:state.type,name:data.displayName||makeDisplayName(item.file),assetId:data.assetId||'PROCESSING',status:data.status||'processing',createdAt:new Date().toISOString()});
-    renderQueue();
-    return data;
-  }catch(err){
-    item.status='error'; item.percent=0; item.error=String(err?.message||err); renderQueue(); return null;
-  }
-}
-async function uploadAsset(){
-  if(state.uploading||!state.files.length) return;
-  const name=$('assetName').value.trim();
-  if(name.length<3||name.length>50){toast('Nama asset harus 3–50 karakter.','error');return;}
-  if($('creatorType').value==='group'&&!/^\d+$/.test($('groupId').value.trim())){toast('Group ID wajib diisi dengan angka.','error');return;}
-  state.uploading=true; $('uploadBtn').disabled=true;
-  const queue=[...state.files.filter(x=>x.status==='queued')];
-  const concurrency=Math.min(2,Math.max(1,Number(localStorage.getItem('asset_upload_concurrency')||2)));
-  let cursor=0,active=0,completed=0;
-  await new Promise(resolve=>{
-    const next=()=>{
-      while(active<concurrency&&cursor<queue.length){
-        const item=queue[cursor++]; active++;
-        uploadOne(item).finally(()=>{active--;completed++;const pct=Math.round((completed/queue.length)*100);setProgress(pct,completed===queue.length?'Batch complete':`Uploading ${completed}/${queue.length}...`);if(completed>=queue.length&&active===0)resolve();else next();});
-      }
-    };
-    setProgress(2,`Starting ${queue.length} upload${queue.length===1?'':'s'}...`); next();
-  });
-  state.uploading=false; renderQueue(); updateButton();
-  const failed=state.files.filter(x=>x.status==='error').length, done=state.files.filter(x=>x.status==='done'||x.status==='processing').length;
-  toast(`${done} berhasil · ${failed} gagal`,failed?'error':'success'); setTimeout(clearProgress,1100);
-}
-function getHistory(){try{return JSON.parse(localStorage.getItem('roblox_asset_hub_history')||'[]');}catch{return[];}}
-function saveHistory(list){localStorage.setItem('roblox_asset_hub_history',JSON.stringify(list.slice(0,100)));}
-function addHistory(item){const list=getHistory();list.unshift(item);saveHistory(list);renderHistory();}
-function statusLabel(status){const s=String(status||'').toLowerCase();if(s.includes('approv')||s==='completed')return'Approved';if(s.includes('reject'))return'Rejected';return'Reviewing';}
-function renderHistory(){
-  const list=getHistory();
-  $('statCompleted').textContent=list.filter(x=>x.status==='completed'||/approv/i.test(x.status)).length;
-  $('statReviewing').textContent=list.filter(x=>/processing|review/i.test(x.status)).length;
-  $('statRejected').textContent=list.filter(x=>/reject/i.test(x.status)).length;
-  if(!list.length){$('historyList').innerHTML='<div class="empty-history"><span>◇</span><h3>No assets yet</h3><p>Uploaded assets will be shown here.</p></div>';return;}
-  $('historyList').innerHTML=list.map(x=>{const cfg=TYPES[x.type]||TYPES.image,status=statusLabel(x.status),date=x.createdAt?new Date(x.createdAt).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}):'',id=String(x.assetId||''),link=id&&id!=='PROCESSING'?`https://create.roblox.com/store/asset/${encodeURIComponent(id)}`:'';return `<div class="history-row"><div class="history-art">${cfg.icon}</div><div class="history-main"><strong>${esc(x.name)}</strong><small>${date}</small></div><div class="history-type">${cfg.label}</div><div class="history-status">${status}</div><div class="history-id">${esc(id||'—')}</div>${link?`<button class="history-open" data-link="${esc(link)}">Open</button>`:''}<button class="history-copy" data-id="${esc(id)}">Copy ID</button></div>`;}).join('');
-  document.querySelectorAll('.history-copy').forEach(btn=>btn.addEventListener('click',()=>copyId(btn.dataset.id)));
-  document.querySelectorAll('.history-open').forEach(btn=>btn.addEventListener('click',()=>window.open(btn.dataset.link,'_blank','noopener')));
-}
-
-typeButtons.forEach(btn=>btn.addEventListener('click',()=>updateType(btn.dataset.type)));
-fileInput.addEventListener('change',e=>addFiles(e.target.files));
-['dragenter','dragover'].forEach(type=>dropzone.addEventListener(type,e=>{e.preventDefault();dropzone.classList.add('drag');}));
-['dragleave','drop'].forEach(type=>dropzone.addEventListener(type,e=>{e.preventDefault();dropzone.classList.remove('drag');}));
-dropzone.addEventListener('drop',e=>addFiles(e.dataTransfer.files));
-$('assetName').addEventListener('input',updateButton);
-$('uploadBtn').addEventListener('click',uploadAsset);
-$('scrollUpload').addEventListener('click',()=>$('uploadWorkspace').scrollIntoView({behavior:'smooth'}));
-$('clearHistory').addEventListener('click',()=>{localStorage.removeItem('roblox_asset_hub_history');renderHistory();toast('History view cleared.','success');});
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!state.uploading)clearProgress();});
-
-injectMultiUi();
-updateType('image');
-renderQueue();
-renderHistory();
+const TYPES={image:{label:'Image',icon:'▧',assetType:'image',accept:['.png','.jpg','.jpeg','.bmp','.tga']},decal:{label:'Decal',icon:'◈',assetType:'decal',accept:['.png','.jpg','.jpeg','.bmp','.tga']},model:{label:'Model',icon:'◇',assetType:'model',accept:['.fbx','.gltf','.glb','.rbxm','.rbxmx']},animation:{label:'Animation',icon:'◎',assetType:'animation',accept:['.fbx','.rbxm','.rbxmx']},audio:{label:'Audio',icon:'♫',assetType:'audio',accept:['.mp3','.wav','.ogg','.flac']},video:{label:'Video',icon:'▶',assetType:'video',accept:['.mp4','.mov','.webm']}};
+const state={type:'image',files:[],uploading:false,paused:false,filter:'all',search:'',running:0,concurrency:2};
+const $=id=>document.getElementById(id),typeButtons=[...document.querySelectorAll('.type-card')],fileInput=$('fileInput'),dropzone=$('dropzone');
+function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}function ext(n){return'.'+String(n).split('.').pop().toLowerCase()}function fmt(n){return n<1048576?`${(n/1024).toFixed(1)} KB`:`${(n/1048576).toFixed(2)} MB`}
+function toast(m,k=''){const e=$('toast');e.textContent=m;e.className=`toast ${k} show`;clearTimeout(toast.t);toast.t=setTimeout(()=>e.className='toast',3200)}
+function updateType(t){state.type=t;typeButtons.forEach(b=>b.classList.toggle('active',b.dataset.type===t));fileInput.accept=TYPES[t].accept.join(',');$('dropTitle').textContent=`Drop your ${TYPES[t].label.toLowerCase()} files here`;$('dropMeta').textContent=`${TYPES[t].accept.map(x=>x.slice(1).toUpperCase()).join(' · ')} · max 20 MB each`;renderQueue();}
+function addFiles(fs){let bad=0,dup=0;for(const f of [...fs||[]]){if(f.size>20*1024*1024||!TYPES[state.type].accept.includes(ext(f.name))){bad++;continue}const key=`${f.name}|${f.size}|${f.lastModified}`;if(state.files.some(x=>x.key===key)){dup++;continue}state.files.push({key,file:f,status:'queued',percent:0,result:null,error:null})}if(bad)toast(`${bad} file ditolak: format atau ukuran tidak sesuai.`,'error');if(dup)toast(`${dup} file duplikat dilewati.`);renderQueue();}
+function clearQueue(){if(state.uploading)return;state.files=[];fileInput.value='';renderQueue()}
+function removeFile(k){if(state.uploading)return;state.files=state.files.filter(x=>x.key!==k);renderQueue()}
+function displayNameFor(item){const p=$('assetName').value.trim(),base=item.file.name.replace(/\.[^.]+$/,'').replace(/[_-]+/g,' ').trim();return(p?`${p} - ${base}`:base).slice(0,50)}
+function renderQueue(){const list=$('queueList');if(!list)return;list.classList.toggle('hidden',false);$('selectionSummary')&&($('selectionSummary').textContent=`${state.files.length} file${state.files.length===1?'':'s'} selected`);const ready=state.files.filter(x=>x.status==='queued').length,running=state.files.filter(x=>x.status==='uploading').length,done=state.files.filter(x=>['done','processing'].includes(x.status)).length,failed=state.files.filter(x=>x.status==='error').length;['queueCount'].forEach(id=>$(id)&&($(id).textContent=state.files.length));if($('queueReady'))$('queueReady').textContent=ready;if($('queueRunning'))$('queueRunning').textContent=running;if($('queueDone'))$('queueDone').textContent=done;if($('queueErrors'))$('queueErrors').textContent=failed;if(!state.files.length){list.innerHTML='<div class="empty-history"><span>◇</span><h3>Queue is empty</h3><p>Add multiple files above to build a batch.</p></div>';return}list.innerHTML=state.files.map(x=>{const c=TYPES[x.type||state.type]||TYPES[state.type],id=x.result?.assetId||'',url=x.result?.assetUrl||(id?`https://create.roblox.com/store/asset/${id}`:'');return `<div class="queue-item ${esc(x.status)}"><div class="queue-item-icon">${c.icon}</div><div class="queue-item-main"><strong>${esc(displayNameFor(x))}</strong><small>${esc(x.file.name)} · ${fmt(x.file.size)} · ${esc(x.status)}</small>${x.error?`<em>${esc(x.error)}</em>`:''}</div><div class="queue-progress"><i style="width:${x.percent}%"></i></div><div class="queue-actions">${id?`<button class="queue-link" data-open="${esc(url)}">Open</button><button class="queue-copy" data-id="${esc(id)}">Copy</button>`:''}${!state.uploading?`<button class="queue-remove" data-key="${esc(x.key)}">×</button>`:''}</div></div>`}).join('');list.querySelectorAll('[data-key]').forEach(b=>b.onclick=()=>removeFile(b.dataset.key));list.querySelectorAll('[data-id]').forEach(b=>b.onclick=()=>copyId(b.dataset.id));list.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>window.open(b.dataset.open,'_blank','noopener'));}
+function copyId(id){if(!id)return;navigator.clipboard?.writeText(id).then(()=>toast('Asset ID copied.','success')).catch(()=>toast(id))}
+function addHistory(x){const h=getHistory();h.unshift(x);localStorage.setItem('roblox_asset_hub_history',JSON.stringify(h.slice(0,200)));renderHistory()}
+function getHistory(){try{return JSON.parse(localStorage.getItem('roblox_asset_hub_history')||'[]')}catch{return[]}}
+function renderHistory(){const term=state.search.toLowerCase(),items=getHistory().filter(x=>(state.filter==='all'||x.type===state.filter)&&(`${x.name} ${x.assetId||''}`).toLowerCase().includes(term));$('historyList').innerHTML=items.length?items.map(x=>{const c=TYPES[x.type]||TYPES.image,id=x.assetId;return `<div class="history-row"><div class="history-art">${c.icon}</div><div class="history-main"><strong>${esc(x.name)}</strong><small>${x.createdAt?new Date(x.createdAt).toLocaleString('id-ID',{dateStyle:'medium',timeStyle:'short'}):''}</small></div><div class="history-type">${c.label}</div><div class="history-status">${statusLabel(x.status)}</div><div class="history-id">${esc(id||'—')}</div><button class="history-open" data-open="${id?`https://create.roblox.com/store/asset/${id}`:''}" ${id?'':'disabled'}>Open</button><button class="history-copy" data-id="${esc(id||'')}">Copy</button></div>`}).join(''):'<div class="empty-history"><span>◇</span><h3>No matching assets</h3><p>Upload assets or change your filter.</p></div>';$('historyList').querySelectorAll('.history-open').forEach(b=>b.onclick=()=>b.dataset.open&&window.open(b.dataset.open,'_blank','noopener'));$('historyList').querySelectorAll('.history-copy').forEach(b=>b.onclick=()=>copyId(b.dataset.id));$('statCompleted').textContent=items.filter(x=>x.status==='completed'||x.status==='done').length;$('statReviewing').textContent=items.filter(x=>!['completed','done','rejected','failed'].includes(x.status)).length;$('statRejected').textContent=items.filter(x=>/reject|fail/i.test(x.status)).length}
+function statusLabel(s){return /reject|fail/i.test(s)?'Rejected':/complete|done/i.test(s)?'Approved':'Reviewing'}
+async function uploadOne(x){x.status='uploading';x.percent=5;renderQueue();const fd=new FormData();fd.append('file',x.file,x.file.name);fd.append('assetType',TYPES[state.type].assetType);fd.append('displayName',displayNameFor(x));fd.append('description',$('description').value.trim());fd.append('creatorType',$('creatorType').value);if($('creatorType').value==='group')fd.append('groupId',$('groupId').value.trim());try{const r=await fetch('/api/assets/upload',{method:'POST',body:fd});x.percent=75;const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||d.message||`HTTP ${r.status}`);x.result=d;x.percent=100;x.status=d.status==='processing'?'processing':'done';addHistory({type:state.type,name:d.displayName||displayNameFor(x),assetId:d.assetId||'',status:d.status||'completed',operationId:d.operationId||null,createdAt:new Date().toISOString()})}catch(e){x.status='error';x.error=e.message||'Upload failed';x.percent=0}renderQueue()}
+async function pump(){while(!state.paused&&state.running<state.concurrency){const x=state.files.find(i=>['queued','retry'].includes(i.status));if(!x)break;state.running++;uploadOne(x).finally(()=>{state.running--;pump()})}}
+function startUpload(){if(state.uploading||!state.files.length)return;if($('creatorType').value==='group'&&!/^\d+$/.test($('groupId').value.trim())){toast('Group ID wajib diisi.','error');return}state.uploading=true;state.paused=false;$('uploadAll').disabled=true;$('uploadBtn')?.setAttribute('disabled','disabled');$('progressWrap')?.classList.remove('hidden');pump();const t=setInterval(()=>{const total=state.files.length,done=state.files.filter(x=>['done','processing','error'].includes(x.status)).length;const pct=total?Math.round(done/total*100):0;if($('progressBar'))$('progressBar').style.width=`${pct}%`;if($('progressPct'))$('progressPct').textContent=`${pct}%`;if($('progressText'))$('progressText').textContent=done===total?'Batch complete':`Uploading ${done}/${total}...`;if(done===total&&state.running===0){clearInterval(t);state.uploading=false;$('uploadBtn')?.removeAttribute('disabled');renderQueue();toast(`${state.files.filter(x=>['done','processing'].includes(x.status)).length} selesai · ${state.files.filter(x=>x.status==='error').length} gagal`,state.files.some(x=>x.status==='error')?'error':'success')}}},250)}
+async function inspect(id){if(!id)return;$('inspectorTitle').textContent=`Asset #${id}`;$('inspectorBody').innerHTML='<div class="inspector-loading">Loading metadata…</div>';try{const r=await fetch(`/api/assets/${encodeURIComponent(id)}`),d=await r.json();if(!r.ok)throw new Error(d.error||'Failed');const a=d.asset||d;$('inspectorBody').innerHTML=`<div class="inspector-grid"><div><span>Name</span><b>${esc(a.displayName||a.name||'—')}</b></div><div><span>Type</span><b>${esc(a.assetType||'—')}</b></div><div><span>Moderation</span><b>${esc(a.moderationResult?.moderationState||'—')}</b></div></div><div class="inspector-links"><button onclick="copyId('${esc(id)}')">Copy ID</button><button onclick="navigator.clipboard.writeText('rbxassetid://${esc(id)}')">Copy URI</button><button onclick="window.open('https://create.roblox.com/store/asset/${esc(id)}','_blank')">Open Roblox ↗</button></div>`}catch(e){$('inspectorBody').innerHTML=`<div class="inspector-error">${esc(e.message||e)}</div>`}$('inspectorPanel').scrollIntoView({behavior:'smooth',block:'start'})}
+$('fileInput').addEventListener('change',e=>addFiles(e.target.files));$('dropzone').addEventListener('drop',e=>{e.preventDefault();dropzone.classList.remove('drag');addFiles(e.dataTransfer.files)});['dragenter','dragover'].forEach(t=>dropzone.addEventListener(t,e=>{e.preventDefault();dropzone.classList.add('drag')}));['dragleave','drop'].forEach(t=>dropzone.addEventListener(t,e=>{e.preventDefault();dropzone.classList.remove('drag')}));typeButtons.forEach(b=>b.addEventListener('click',()=>updateType(b.dataset.type)));$('addMore')?.addEventListener('click',()=>fileInput.click());$('clearQueue').addEventListener('click',clearQueue);$('uploadAll').addEventListener('click',startUpload);$('uploadBtn')?.addEventListener('click',startUpload);$('pauseQueue').addEventListener('click',()=>{state.paused=!state.paused;$('pauseQueue').textContent=state.paused?'Resume':'Pause';if(!state.paused)pump()});$('retryFailed').addEventListener('click',()=>{state.files.filter(x=>x.status==='error').forEach(x=>{x.status='retry';x.error=null;x.percent=0});renderQueue();if(!state.uploading)startUpload()});$('assetName').addEventListener('input',updateButton);$('creatorType').addEventListener('change',()=>$('groupField')?.classList.toggle('hidden',$('creatorType').value!=='group'));$('assetSearch').addEventListener('input',e=>{state.search=e.target.value;renderHistory()});document.querySelectorAll('.history-tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.history-tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.filter=b.dataset.filter;renderHistory()}));$('exportManifest').addEventListener('click',()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(getHistory(),null,2)],{type:'application/json'}));a.download=`roblox-assets-${new Date().toISOString().slice(0,10)}.json`;a.click()});$('clearHistory').addEventListener('click',()=>{localStorage.removeItem('roblox_asset_hub_history');renderHistory()});$('scrollUpload').addEventListener('click',()=>$('uploadWorkspace').scrollIntoView({behavior:'smooth'}));$('closeInspector')?.addEventListener('click',()=>$('inspectorBody').innerHTML='<div class="inspector-empty">Choose an asset from the library.</div>');
+function updateButton(){const n=$('assetName').value.trim();$('nameHint').classList.toggle('error',n.length>0&&(n.length<3||n.length>50));const ok=state.files.length&&n.length>=3&&n.length<=50&&!state.uploading;$('uploadBtn').disabled=!ok;$('uploadAll').disabled=!ok}
+updateType('image');updateButton();renderQueue();renderHistory();
