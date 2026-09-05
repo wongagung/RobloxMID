@@ -9,6 +9,7 @@ import { promisify } from "util";
 import { fileURLToPath } from "url";
 import { uploadAudioToRoblox, getAssetModerationStatus } from "./roblox.js";
 import { sendAudioToTelegram } from "./telegram.js";
+import { createAssetHubRouter } from "./asset-preload.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -48,6 +49,9 @@ fs.mkdirSync(dataDir, { recursive: true });
 if (!fs.existsSync(historyFile)) fs.writeFileSync(historyFile, "[]");
 
 const app = express();
+
+// Asset Hub — mounted directly on the main Express application
+app.use(createAssetHubRouter());
 const PORT = Number(process.env.PORT || 8787);
 const MAX_MB = Number(process.env.MAX_FILE_SIZE_MB || 20);
 const CLEANUP_MINUTES = Number(process.env.UPLOAD_RETENTION_MINUTES || 60);

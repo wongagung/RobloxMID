@@ -27,7 +27,7 @@ function contentType(filename) {
   })[ext] || 'application/octet-stream';
 }
 
-function router() {
+export function createAssetHubRouter() {
   const r = express.Router();
   r.get("/api/assets/health", (_req, res) => res.json({ ok: true, service: "asset-hub" }));
 
@@ -75,8 +75,3 @@ function router() {
   return r;
 }
 
-const originalListen = express.application.listen;
-if (!express.application.__robloxAssetHubPatched) {
-  express.application.__robloxAssetHubPatched = true;
-  express.application.listen = function (...args) { try { this.use(router()); console.log("[Asset Hub] isolated routes mounted"); } catch(e) { console.error("[Asset Hub] failed to mount routes:",e); } return originalListen.apply(this,args); };
-}
