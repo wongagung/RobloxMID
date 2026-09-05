@@ -6,34 +6,24 @@ const API_BASE = "https://apis.roblox.com";
 const MAX_BYTES = 20 * 1024 * 1024;
 
 const TYPES = {
-  image: { assetType: "Image", exts: [".png", ".jpg", ".jpeg", ".bmp", ".tga"], mimes: ["image/png", "image/jpeg", "image/bmp", "image/x-tga"] },
-  decal: { assetType: "Decal", exts: [".png", ".jpg", ".jpeg", ".bmp", ".tga"], mimes: ["image/png", "image/jpeg", "image/bmp", "image/x-tga"] },
-  model: { assetType: "Model", exts: [".fbx", ".gltf", ".glb", ".rbxm", ".rbxmx"], mimes: ["model/gltf+json", "model/gltf-binary", "application/octet-stream"] },
-  animation: { assetType: "Animation", exts: [".fbx", ".rbxm", ".rbxmx"], mimes: ["application/octet-stream", "model/fbx"] },
-  audio: { assetType: "Audio", exts: [".mp3", ".wav", ".ogg", ".flac"], mimes: ["audio/mpeg", "audio/wav", "audio/ogg", "audio/flac"] },
-  video: { assetType: "Video", exts: [".mp4", ".mov", ".webm"], mimes: ["video/mp4", "video/quicktime", "video/webm"] }
+  image: { assetType: "Image", exts: [".png", ".jpg", ".jpeg", ".bmp", ".tga"] },
+  decal: { assetType: "Decal", exts: [".png", ".jpg", ".jpeg", ".bmp", ".tga"] },
+  model: { assetType: "Model", exts: [".fbx", ".gltf", ".glb", ".rbxm", ".rbxmx"] },
+  animation: { assetType: "Animation", exts: [".fbx", ".rbxm", ".rbxmx"] },
+  audio: { assetType: "Audio", exts: [".mp3", ".wav", ".ogg", ".flac"] },
+  video: { assetType: "Video", exts: [".mp4", ".mov", ".webm"] }
 };
 
 async function robloxRequest(url, options = {}) {
   const response = await fetch(url, options);
   const text = await response.text();
   let data = {};
-  if (text) {
-    try { data = JSON.parse(text); } catch { data = { raw: text }; }
-  }
+  if (text) { try { data = JSON.parse(text); } catch { data = { raw: text }; } }
   if (!response.ok) {
     const msg = data?.message || data?.error || data?.details?.[0]?.message || data?.raw || `HTTP ${response.status}`;
     throw new Error(`${msg} (HTTP ${response.status})`);
   }
   return data;
-}
-
-function validFile(type, file) {
-  const cfg = TYPES[type];
-  if (!cfg || !file) return false;
-  const ext = path.extname(file.originalname).toLowerCase();
-  const mime = String(file.mimetype || "").toLowerCase();
-  return cfg.exts.includes(ext) || cfg.mimes.includes(mime);
 }
 
 function makeMultipart({ request, fileBuffer, fileName, fileContentType }) {
@@ -52,27 +42,22 @@ function makeMultipart({ request, fileBuffer, fileName, fileContentType }) {
 
 async function waitForOperation(operationId, apiKey, timeoutMs = 120000) {
   const started = Date.now();
-  const interval = 2000;
   while (Date.now() - started < timeoutMs) {
-    await new Promise(r => setTimeout(r, interval));
-    const op = await robloxRequest(`${API_BASE}/assets/v1/operations/${encodeURIComponent(operationId)}`, {
-      headers: { "x-api-key": apiKey }
-    });
+    await new Promise(r => setTimeout(r, 2000));
+    const op = await robloxRequest(`${API_BASE}/assets/v1/operations/${encodeURIComponent(operationId)}`, { headers: { "x-api-key": apiKey } });
     if (!op?.done) continue;
     if (op?.error) throw new Error(op.error?.message || JSON.stringify(op.error));
     const assetId = op?.response?.assetId || op?.response?.asset?.assetId || op?.response?.asset?.id || op?.response?.id;
     if (!assetId) throw new Error(`Operation selesai tetapi assetId tidak ditemukan: ${JSON.stringify(op)}`);
-    return { operationId, assetId: String(assetId), raw: op };
+    return { operationId, assetId: String(assetId), status: "completed", raw: op };
   }
   return { operationId, status: "processing" };
 }
 
-export async function uploadGenericAsset({ filePath, originalName, assetType, displayName, description = "", userId, apiKey }) {
+export async function uploadGenericAsset({ filePath, originalName, assetType, displayName, description = "", creatorType = "user", userId, groupId, apiKey }) {
   if (!apiKey) throw new Error("ROBLOX_API_KEY tidak tersedia.");
-  if (!userId) throw new Error("ROBLOX_USER_ID tidak tersedia.");
   if (!TYPES[assetType]) throw new Error(`Asset type tidak didukung: ${assetType}`);
   if (!fs.existsSync(filePath)) throw new Error("File upload tidak ditemukan.");
-
   const stat = fs.statSync(filePath);
   if (stat.size <= 0) throw new Error("File kosong.");
   if (stat.size > MAX_BYTES) throw new Error("Maksimum ukuran asset adalah 20 MB.");
@@ -81,42 +66,24 @@ export async function uploadGenericAsset({ filePath, originalName, assetType, di
   const cfg = TYPES[assetType];
   if (!cfg.exts.includes(ext)) throw new Error(`Format ${assetType} tidak didukung: ${ext}`);
 
-  const fileBuffer = fs.readFileSync(filePath);
+  const creatorId = creatorType === "group" ? groupId : userId;
+  if (!creatorId || !/^\d+$/.test(String(creatorId))) throw new Error(`${creatorType === "group" ? "Group ID" : "User ID"} tidak valid.`);
+
   const request = {
     assetType: cfg.assetType,
     displayName: String(displayName || path.basename(originalName || filePath, ext)).slice(0, 50),
     description: String(description || "").slice(0, 1000),
-    creationContext: { creator: { userId: String(userId) } }
+    creationContext: { creator: creatorType === "group" ? { groupId: String(creatorId) } : { userId: String(creatorId) } }
   };
-
-  const multipart = makeMultipart({
-    request,
-    fileBuffer,
-    fileName: originalName || path.basename(filePath),
-    fileContentType: undefined
-  });
-
-  const created = await robloxRequest(`${API_BASE}/assets/v1/assets`, {
-    method: "POST",
-    headers: {
-      "x-api-key": apiKey,
-      "Content-Type": multipart.contentType,
-      "Content-Length": String(multipart.body.length)
-    },
-    body: multipart.body
-  });
-
+  const multipart = makeMultipart({ request, fileBuffer: fs.readFileSync(filePath), fileName: originalName || path.basename(filePath), fileContentType: undefined });
+  const created = await robloxRequest(`${API_BASE}/assets/v1/assets`, { method: "POST", headers: { "x-api-key": apiKey, "Content-Type": multipart.contentType, "Content-Length": String(multipart.body.length) }, body: multipart.body });
   const operationId = created?.operationId || created?.path?.split("/").pop();
   const directAssetId = created?.assetId || created?.asset?.assetId || created?.asset?.id || created?.id;
   if (!operationId && !directAssetId) throw new Error(`Roblox tidak mengembalikan operationId/assetId: ${JSON.stringify(created)}`);
-
   if (directAssetId) return { status: "completed", assetId: String(directAssetId), operationId: null };
   return waitForOperation(operationId, apiKey);
 }
 
-export async function getGenericAsset(assetId, apiKey) {
-  return robloxRequest(`${API_BASE}/assets/v1/assets/${encodeURIComponent(assetId)}`, { headers: { "x-api-key": apiKey } });
-}
-
+export async function getGenericAsset(assetId, apiKey) { return robloxRequest(`${API_BASE}/assets/v1/assets/${encodeURIComponent(assetId)}`, { headers: { "x-api-key": apiKey } }); }
 export const ASSET_HUB_TYPES = TYPES;
 export const ASSET_HUB_MAX_BYTES = MAX_BYTES;
