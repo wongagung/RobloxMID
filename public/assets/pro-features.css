@@ -1,15 +1,27 @@
 :root {
-  --pro-gap: 14px;
-  --pro-card-radius: 16px;
+  --pro-gap: 16px;
+  --pro-card-radius: 18px;
 }
 
 .pro-card {
-  margin-top: 20px;
+  position: relative;
+  margin-top: 24px;
   overflow: hidden;
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+}
+
+.pro-card::before {
+  content: "";
+  display: block;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2));
 }
 
 .pro-card .section-head {
-  align-items: flex-start;
+  align-items: center;
+  gap: 18px;
+  padding-top: 22px;
 }
 
 .pro-card .section-head > div:first-child {
@@ -17,11 +29,15 @@
 }
 
 .pro-card .section-head h2 {
-  margin: 4px 0 5px;
+  margin: 5px 0 7px;
+  font-size: 22px;
+  letter-spacing: -.025em;
 }
 
 .pro-card .section-head p {
-  max-width: 720px;
+  max-width: 760px;
+  margin: 0;
+  line-height: 1.6;
 }
 
 .pro-badge {
@@ -29,16 +45,17 @@
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  min-height: 30px;
-  padding: 7px 11px;
-  border: 1px solid var(--line);
+  min-height: 32px;
+  padding: 8px 12px;
+  border: 1px solid var(--line2);
   border-radius: 999px;
   font-size: 10px;
   line-height: 1;
-  letter-spacing: .14em;
+  letter-spacing: .15em;
   font-weight: 800;
   color: var(--accent);
-  background: rgba(124, 92, 255, .08);
+  background: rgba(124, 92, 255, .09);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
   white-space: nowrap;
 }
 
@@ -46,77 +63,87 @@
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: var(--pro-gap);
-  margin-top: 18px;
+  margin-top: 20px;
 }
 
 .pro-tool {
   position: relative;
-  min-height: 112px;
+  min-height: 126px;
   border: 1px solid var(--line);
   background: var(--surface2);
   border-radius: var(--pro-card-radius);
-  padding: 15px;
+  padding: 17px 40px 17px 17px;
   text-align: left;
   color: var(--text);
   cursor: pointer;
   display: grid;
   grid-template-rows: auto 1fr;
-  gap: 8px;
+  align-content: start;
+  gap: 9px;
   transition: transform .18s ease, border-color .18s ease, box-shadow .18s ease, background .18s ease;
 }
 
 .pro-tool::after {
   content: "→";
   position: absolute;
-  right: 14px;
-  top: 13px;
-  font-size: 13px;
+  right: 15px;
+  top: 15px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   color: var(--muted);
-  opacity: .8;
-  transition: transform .18s ease, color .18s ease;
+  background: var(--surface3);
+  font-size: 13px;
+  opacity: .9;
+  transition: transform .18s ease, color .18s ease, border-color .18s ease, background .18s ease;
 }
 
 .pro-tool:hover {
-  transform: translateY(-2px);
-  border-color: var(--line2);
-  box-shadow: var(--shadow);
+  transform: translateY(-3px);
+  border-color: var(--accent);
+  box-shadow: 0 14px 34px rgba(0,0,0,.15);
 }
 
 .pro-tool:hover::after {
   transform: translateX(2px);
   color: var(--accent);
+  border-color: rgba(124,92,255,.45);
+  background: rgba(124,92,255,.08);
 }
 
 .pro-tool:focus-visible,
 .collection-row button:focus-visible,
 .collection-assets button:focus-visible {
   outline: 2px solid var(--accent);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
 .pro-tool strong {
   display: block;
-  padding-right: 24px;
+  padding-right: 2px;
   font-size: 13px;
-  line-height: 1.35;
+  line-height: 1.4;
   letter-spacing: -.01em;
   color: var(--text);
 }
 
 .pro-tool span {
   display: block;
-  max-width: 32ch;
+  max-width: 34ch;
   font-size: 11.5px;
   color: var(--muted);
-  line-height: 1.55;
+  line-height: 1.6;
 }
 
 .recovery-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 16px;
-  padding-top: 14px;
+  margin-top: 18px;
+  padding: 14px 0 2px;
   border-top: 1px solid var(--line);
   font-size: 12px;
   color: var(--muted);
@@ -386,12 +413,28 @@ body.compact .diff-list > div {
   color: #172230;
 }
 
+body.compact .pro-card::before {
+  background: linear-gradient(90deg, #6c50e8, #4f86ff);
+}
+
 body.compact .pro-tool {
   background: #f8fafc;
+  box-shadow: 0 8px 22px rgba(35,50,70,.05);
 }
 
 body.compact .pro-tool:hover {
   background: #ffffff;
+  box-shadow: 0 14px 34px rgba(35,50,70,.10);
+}
+
+body.compact .pro-tool::after {
+  background: #f1f4f8;
+  border-color: #d9e0e8;
+}
+
+body.compact .pro-tool:hover::after {
+  background: #f0ebff;
+  border-color: #cfc5fa;
 }
 
 body.compact .pro-tool span,
@@ -425,6 +468,7 @@ body.compact .pro-badge {
 @media (max-width: 700px) {
   .pro-card .section-head {
     flex-direction: column;
+    align-items: flex-start;
     gap: 10px;
   }
 
@@ -457,6 +501,6 @@ body.compact .pro-badge {
   }
 
   .pro-tool {
-    min-height: 104px;
+    min-height: 108px;
   }
 }
