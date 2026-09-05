@@ -29,6 +29,12 @@ function contentType(filename) {
   return ({'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.bmp':'image/bmp','.tga':'image/x-tga','.fbx':'model/fbx','.gltf':'model/gltf+json','.glb':'model/gltf-binary','.rbxm':'model/x-rbxm','.rbxmx':'model/x-rbxm','.mp3':'audio/mpeg','.wav':'audio/wav','.ogg':'audio/ogg','.flac':'audio/flac','.mp4':'video/mp4','.mov':'video/quicktime','.webm':'video/webm'})[ext] || 'application/octet-stream';
 }
 
+function normalizeAssetType(value) {
+  const raw = String(value || "Image").trim().toLowerCase();
+  const map = { image:"image", decal:"decal", model:"model", animation:"animation", audio:"audio", video:"video", asset_type_image:"image", asset_type_decal:"decal", asset_type_model:"model", asset_type_animation:"animation", asset_type_audio:"audio", asset_type_video:"video" };
+  return map[raw] || raw;
+}
+
 export function createAssetHubRouter() {
   const r = express.Router();
   r.get("/api/assets/health", (_req, res) => res.json({ ok: true, service: "asset-hub" }));
@@ -38,18 +44,19 @@ export function createAssetHubRouter() {
     try {
       const account = activeAccount();
       if (!req.file) return res.status(400).json({ error: "File wajib diisi." });
-      const assetType = String(req.body.assetType || "Image").trim();
+      const assetType = normalizeAssetType(req.body.assetType);
       const creatorType = String(req.body.creatorType || "user").toLowerCase();
       const groupId = String(req.body.groupId || "").trim();
       const displayName = String(req.body.displayName || path.basename(req.file.originalname, path.extname(req.file.originalname))).trim();
       const description = String(req.body.description || "");
       if (displayName.length < 3 || displayName.length > 50) return res.status(400).json({ error: "Nama asset harus 3–50 karakter." });
+      if (!["user", "group"].includes(creatorType)) return res.status(400).json({ error: "Creator type tidak valid." });
       if (creatorType === "group" && !/^\d+$/.test(groupId)) return res.status(400).json({ error: "Group ID tidak valid." });
       temp = path.join(os.tmpdir(), `robloxmid-${Date.now()}-${crypto.randomUUID()}${path.extname(req.file.originalname).toLowerCase()}`);
       fs.writeFileSync(temp, req.file.buffer);
       const result = await uploadGenericAsset({ filePath: temp, originalName: req.file.originalname, assetType, displayName, description, creatorType, userId: account.userId, groupId, apiKey: account.apiKey, fileContentType: contentType(req.file.originalname) });
       const assetId = result.assetId || null;
-      res.json({ ok: true, ...result, assetId, displayName, account: account.label, assetUri: assetId ? `rbxassetid://${assetId}` : null, assetUrl: assetId ? `https://create.roblox.com/store/asset/${assetId}` : null });
+      res.json({ ok: true, ...result, assetId, displayName, assetType, account: account.label, assetUri: assetId ? `rbxassetid://${assetId}` : null, assetUrl: assetId ? `https://create.roblox.com/store/asset/${assetId}` : null });
     } catch (error) {
       console.error("[Asset Hub] upload error:", error);
       res.status(400).json({ error: error?.message || "Upload asset gagal." });
