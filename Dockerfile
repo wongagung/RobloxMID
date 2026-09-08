@@ -12,12 +12,9 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY . .
 
-# Keep the existing source handlers as fallback, but put the robust downloader first.
-RUN sed -i '1i import { mountYtDownloadFallback } from "./youtube-download-fallback.js";' server/asset-preload.js \
-    && sed -i 's/const r=express.Router();/const r=express.Router();mountYtDownloadFallback(r);/' server/asset-preload.js
-
-# Load the polished playlist UI after the existing app/pagination scripts.
-RUN sed -i 's#<script src="/audio-studio.js"></script>#<script src="/audio-studio.js"></script><script src="/playlist-ui-fix.js"></script>#' public/index.html
+# Runtime source wiring lives in the repository. Do not mutate application files
+# during image build; this keeps Docker builds reproducible and prevents deleted
+# modules from being reintroduced.
 
 RUN mkdir -p uploads data
 EXPOSE 8787
