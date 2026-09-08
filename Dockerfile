@@ -12,9 +12,8 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY . .
 
-# Runtime source wiring lives in the repository. Do not mutate application files
-# during image build; this keeps Docker builds reproducible and prevents deleted
-# modules from being reintroduced.
+# Application wiring is defined only by repository source. Keep Docker builds
+# reproducible and never rewrite or resurrect application modules at build time.
 
 RUN mkdir -p uploads data
 EXPOSE 8787
