@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node --import ./server/asset-preload.js server/index.js",
-    "dev": "node --watch --import ./server/asset-preload.js server/index.js"
+    "start": "node --import ./server/runtime-fixes.js --import ./server/asset-preload.js server/index.js",
+    "dev": "node --watch --import ./server/runtime-fixes.js --import ./server/asset-preload.js server/index.js",
+    "check": "node --check server/index.js && node --check server/asset-preload.js && node --check server/url-source.js && node --check server/asset-hub.js && node --check server/roblox.js && node --check server/telegram.js && node --check server/youtube-download-fallback.js && find public -type f -name '*.js' -print0 | xargs -0 -n1 node --check"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
