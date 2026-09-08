@@ -93,7 +93,7 @@
   }
 
   function injectStyles() {
-    if $("#robloxMidCanonicalPlaylistStyles")) return;
+    if ($("#robloxMidCanonicalPlaylistStyles")) return;
     const style = document.createElement("style");
     style.id = "robloxMidCanonicalPlaylistStyles";
     style.textContent = `
@@ -284,17 +284,13 @@
     head.insertAdjacentElement("afterend", banner);
   }
 
-  function clearEditingMarkers() {
-    document.querySelectorAll("#queuePanel .queue-item.is-editing").forEach(item => {
-      item.classList.remove("is-editing");
-      item.querySelector(".queue-edit-state")?.remove();
-    });
-  }
-
   function markQueueItemForEditing(item) {
     if (!item) return;
     ensureActiveEditingBanner();
-    clearEditingMarkers();
+    document.querySelectorAll("#queuePanel .queue-item.is-editing").forEach(active => {
+      active.classList.remove("is-editing");
+      active.querySelector(".queue-edit-state")?.remove();
+    });
     item.classList.add("is-editing");
     const meta = item.querySelector(".queue-meta");
     if (meta) {
@@ -310,15 +306,6 @@
       bannerTitle.textContent = title;
       banner.classList.add("visible");
     }
-  }
-
-  function normalizeQueueDom() {
-    const queueList = $("#queueList");
-    if (!queueList) return;
-    queueList.querySelectorAll(".queue-item").forEach(item => {
-      const edit = item.querySelector(".queue-edit-btn");
-      if (edit) edit.title = "Muat track ini ke editor";
-    });
   }
 
   function bindQueueEditSelection() {
@@ -352,8 +339,7 @@
         thumbnail: youtubeThumbnail(item),
         url: canonicalItemUrl(item),
         file: null,
-        status: "waiting",
-        errorMessage: ""
+        status: "waiting"
       });
     });
     if (typeof renderQueue === "function") renderQueue();
@@ -377,11 +363,7 @@
     loading = true;
     updateControls();
     try {
-      const query = new URLSearchParams({
-        page: String(targetPage),
-        pageSize: String(PAGE_SIZE),
-        maxItems: String(maxItems)
-      });
+      const query = new URLSearchParams({ page: String(targetPage), pageSize: String(PAGE_SIZE), maxItems: String(maxItems) });
       const response = await fetch(`/api/playlist-info?${query}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -392,14 +374,14 @@
 
       if (!data.isPlaylist && data.items?.length === 1) {
         const item = data.items[0];
+        const thumb = youtubeThumbnail(item);
         if (preview) preview.classList.remove("hidden");
-        const thumb = $("#urlThumb");
+        const image = $("#urlThumb");
         const title = $("#urlTitle");
         const uploader = $("#urlUploader");
         const duration = $("#urlDuration");
         const fetchButton = $("#urlFetchBtn");
-        const thumbUrl = youtubeThumbnail(item);
-        if (thumb) { thumb.src = thumbUrl; thumb.classList.toggle("hidden", !thumbUrl); }
+        if (image) { image.src = thumb; image.classList.toggle("hidden", !thumb); }
         if (title) title.textContent = item.title || "Track";
         if (uploader) uploader.textContent = item.uploader || "";
         if (duration) duration.textContent = item.duration_string ? `⏱ ${item.duration_string}` : "";
@@ -421,9 +403,9 @@
       page = Number(data.page || targetPage);
       hasNext = Boolean(data.hasNext);
       titleEl.textContent = data.playlistTitle || "Playlist";
-      metaEl.textContent = maxItems === 0
-        ? `${currentItems.length}${hasNext ? "+" : ""} track di halaman ini`
-        : `${((page - 1) * PAGE_SIZE) + currentItems.length}/${maxItems} track`;
+      const loadedStart = ((page - 1) * PAGE_SIZE) + 1;
+      const loadedEnd = ((page - 1) * PAGE_SIZE) + currentItems.length;
+      metaEl.textContent = maxItems === 0 ? `Track ${loadedStart}–${loadedEnd}${hasNext ? "+" : ""}` : `Track ${loadedStart}–${loadedEnd} · batas ${maxItems}`;
       card.classList.remove("hidden");
       preview?.classList.add("hidden");
       ensurePagination();
@@ -451,6 +433,8 @@
     selectedItems.clear();
     injectStyles();
     ensurePagination();
+    ensureActiveEditingBanner();
+    bindQueueEditSelection();
     showStatus("⏳ Memuat playlist...", false);
     preview?.classList.add("hidden");
     await loadPage(1);
@@ -474,16 +458,13 @@
   downloadButton && (downloadButton.onclick = downloadSelected);
   infoButton.onclick = check;
 
-  const globalObserver = new MutationObserver(() => {
-    injectStyles();
-    ensureActiveEditingBanner();
-    bindQueueEditSelection();
-    normalizeQueueDom();
-  });
-  globalObserver.observe(document.documentElement, { childList: true, subtree: true });
-
   injectStyles();
   ensureActiveEditingBanner();
   bindQueueEditSelection();
-  normalizeQueueDom();
+
+  const observer = new MutationObserver(() => {
+    ensureActiveEditingBanner();
+    bindQueueEditSelection();
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 })();
