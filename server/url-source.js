@@ -9,7 +9,8 @@ const execFileAsync = promisify(execFile);
 const HTTP_TIMEOUT_MS = Number(process.env.URL_FETCH_TIMEOUT_MS || 120000);
 const YTDLP_INFO_TIMEOUT_MS = Number(process.env.YTDLP_INFO_TIMEOUT_MS || 45000);
 const YTDLP_DOWNLOAD_TIMEOUT_MS = Number(process.env.YTDLP_DOWNLOAD_TIMEOUT_MS || 10 * 60 * 1000);
-const MAX_DURATION_SECONDS = Number(process.env.URL_MAX_DURATION_SECONDS || 1800);
+// 0 = unlimited. Keep the file-size limit as the primary safety guard.
+const MAX_DURATION_SECONDS = Math.max(0, Number(process.env.URL_MAX_DURATION_SECONDS || 0));
 const MAX_BYTES = Number(process.env.MAX_FILE_SIZE_MB || 20) * 1024 * 1024;
 const RETRIES = Math.max(0, Number(process.env.URL_FETCH_RETRIES || 2));
 const UPLOADS_DIR = path.resolve(process.env.UPLOADS_DIR || path.join(process.cwd(), "uploads"));
@@ -270,13 +271,34 @@ function unlinkQuietly(filePath) {
   try { fs.unlinkSync(filePath); } catch {}
 }
 
+function applyDurationLimit(info) {
+  const duration = Number(info?.duration || 0);
+  if (MAX_DURATION_SECONDS > 0 && duration > MAX_DURATION_SECONDS) {
+    const error = new Error(`Audio terlalu panjang. Maksimal ${Math.round(MAX_DURATION_SECONDS / 60)} menit.`);
+    error.code = "TOO_LONG";
+    throw error;
+  }
+}
+
 export function mountUrlSourceRoutes(router) {
   router.post("/api/url-info", async (req, res) => {
     const { url } = req.body || {};
     if (!isHttpUrl(url)) return res.status(400).json({ error: "Hanya URL http/https yang didukung." });
     try {
+      // Direct media doesn't need yt-dlp metadata extraction.
+      if (isDirectMediaUrl(url)) {
+        let title = "Track";
+        try {
+          const pathname = new URL(url).pathname;
+          const name = path.basename(pathname) || "track.mp3";
+          title = path.basename(name, path.extname(name)).slice(0, 100) || "Track";
+        } catch {}
+        return res.json({ title, duration: 0, duration_string: "", thumbnail: null, uploader: "", webpage_url: url, direct: true });
+      }
+
       await ensureYtDlp();
       const info = await getYtInfo(url);
+      applyDurationLimit(info);
       res.json({
         title: String(info.title || info.fulltitle || "Unknown").slice(0, 100),
         duration: Number(info.duration || 0),
@@ -286,7 +308,9 @@ export function mountUrlSourceRoutes(router) {
         webpage_url: info.webpage_url || url,
       });
     } catch (error) {
-      const classified = classifyYtError(error?.message);
+      const classified = error?.code === "TOO_LONG"
+        ? { code: "TOO_LONG", message: error.message }
+        : classifyYtError(error?.message);
       res.status(classified.code === "AUTH_REQUIRED" ? 403 : 502).json({ error: classified.message, code: classified.code });
     }
   });
@@ -342,16 +366,13 @@ export function mountUrlSourceRoutes(router) {
 
     try {
       let title = "Track";
-      let isDirect = isDirectMediaUrl(url);
-      let info = null;
+      const isDirect = isDirectMediaUrl(url);
 
       if (!isDirect) {
         await ensureYtDlp();
-        info = await getYtInfo(url);
+        const info = await getYtInfo(url);
         title = String(info.title || info.fulltitle || "Track").slice(0, 50).trim() || "Track";
-        if (Number(info.duration || 0) > MAX_DURATION_SECONDS) {
-          return res.status(400).json({ error: `Audio terlalu panjang. Maksimal ${Math.round(MAX_DURATION_SECONDS / 60)} menit.` });
-        }
+        applyDurationLimit(info);
       } else {
         try {
           const pathname = new URL(url).pathname;
@@ -364,7 +385,6 @@ export function mountUrlSourceRoutes(router) {
         downloadedPath = `${basePath}${path.extname(new URL(url).pathname).toLowerCase() || ".bin"}`;
         await downloadDirectMedia(url, downloadedPath);
       } else {
-        downloadedPath = `${basePath}.mp3`;
         await downloadWithYtDlp(url, `${basePath}.%(ext)s`);
         downloadedPath = firstMatchingFile(tmpId);
       }
@@ -389,11 +409,11 @@ export function mountUrlSourceRoutes(router) {
       downloadedPath = null;
     } catch (error) {
       unlinkQuietly(downloadedPath);
-      const classified = error?.code === "TOO_LARGE" || error?.code === "NOT_MEDIA"
+      const classified = ["TOO_LARGE", "NOT_MEDIA", "TOO_LONG"].includes(error?.code)
         ? { code: error.code, message: error.message }
         : classifyYtError(error?.message);
       const status = classified.code === "AUTH_REQUIRED" ? 403
-        : ["UNSUPPORTED_URL", "NOT_MEDIA", "TOO_LARGE"].includes(classified.code) ? 400 : 502;
+        : ["UNSUPPORTED_URL", "NOT_MEDIA", "TOO_LARGE", "TOO_LONG"].includes(classified.code) ? 400 : 502;
       console.error("[fetch-url]", error?.stack || error);
       res.status(status).json({ error: classified.message, code: classified.code });
     }
@@ -428,42 +448,56 @@ export function mountUrlSourceRoutes(router) {
       if (direct) {
         try {
           const pathname = new URL(url).pathname;
-          const filename = path.basename(pathname);
-          title = path.basename(filename, path.extname(filename)).slice(0, 50) || "Track";
+          const name = path.basename(pathname) || "track.mp3";
+          title = path.basename(name, path.extname(name)).slice(0, 50) || "Track";
         } catch {}
         send("progress", { step: "meta", message: `Direct media: ${title}`, title });
-        send("progress", { step: "download", message: "Mendownload audio...", percent: 0 });
-        outputPath = `${basePath}${path.extname(new URL(url).pathname).toLowerCase() || ".bin"}`;
-        await downloadDirectMedia(url, outputPath, percent => send("progress", { step: "download", message: `Mendownload audio... ${Math.round(percent)}%`, percent }));
       } else {
         await ensureYtDlp();
         const info = await getYtInfo(url);
         title = String(info.title || info.fulltitle || "Track").slice(0, 50).trim() || "Track";
-        const duration = Number(info.duration || 0);
-        if (duration > MAX_DURATION_SECONDS) throw Object.assign(new Error(`Audio terlalu panjang. Maksimal ${Math.round(MAX_DURATION_SECONDS / 60)} menit.`), { code: "TOO_LONG" });
+        applyDurationLimit(info);
         send("progress", { step: "meta", message: `Ditemukan: ${title}`, title });
-        send("progress", { step: "download", message: "Mendownload audio...", percent: 0 });
-        await downloadWithYtDlp(url, `${basePath}.%(ext)s`, percent => send("progress", { step: "download", message: `Mendownload audio... ${Math.round(percent)}%`, percent }));
+      }
+
+      send("progress", { step: "download", message: "Mendownload audio...", percent: 0 });
+      const progress = percent => send("progress", {
+        step: "download",
+        message: `Mendownload audio... ${Math.round(percent)}%`,
+        percent: Math.round(percent),
+      });
+
+      if (direct) {
+        outputPath = `${basePath}${path.extname(new URL(url).pathname).toLowerCase() || ".bin"}`;
+        await downloadDirectMedia(url, outputPath, progress);
+      } else {
+        await downloadWithYtDlp(url, `${basePath}.%(ext)s`, progress);
         outputPath = firstMatchingFile(tmpId);
       }
 
-      if (!outputPath || !fs.existsSync(outputPath)) throw new Error("File output tidak ditemukan setelah download.");
+      if (!outputPath || !fs.existsSync(outputPath)) throw new Error("File output tidak ditemukan.");
       const stat = fs.statSync(outputPath);
       if (!stat.size) throw new Error("File hasil download kosong.");
-      if (stat.size > MAX_BYTES) throw Object.assign(new Error(`File terlalu besar. Maksimal ${Math.round(MAX_BYTES / 1024 / 1024)} MB.`), { code: "TOO_LARGE" });
+      if (stat.size > MAX_BYTES) {
+        const error = new Error(`File terlalu besar. Maksimal ${Math.round(MAX_BYTES / 1024 / 1024)} MB.`);
+        error.code = "TOO_LARGE";
+        throw error;
+      }
+
+      if (closed) {
+        unlinkQuietly(outputPath);
+        return;
+      }
 
       send("progress", { step: "done", message: "Selesai! Memuat ke editor...", percent: 100 });
-
-      // Keep the existing frontend contract, but cap memory use by refusing oversized SSE payloads.
-      // The normal /api/fetch-url endpoint is preferred for large files.
       const data = fs.readFileSync(outputPath).toString("base64");
       unlinkQuietly(outputPath);
       outputPath = null;
       send("file", { title, data, mimeType: "audio/mpeg" });
-      if (!res.writableEnded) res.end();
+      res.end();
     } catch (error) {
       unlinkQuietly(outputPath);
-      const classified = error?.code === "TOO_LARGE" || error?.code === "NOT_MEDIA" || error?.code === "TOO_LONG"
+      const classified = ["TOO_LARGE", "NOT_MEDIA", "TOO_LONG"].includes(error?.code)
         ? { code: error.code, message: error.message }
         : classifyYtError(error?.message);
       send("error", {
