@@ -11,6 +11,11 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY . .
+
+# Playlist fix: the shared yt-dlp flags intentionally use --no-playlist for single URLs.
+# The playlist-info route must explicitly override that behavior with --yes-playlist.
+RUN sed -i '/"--flat-playlist",/a\        "--yes-playlist",' server/url-source.js
+
 RUN mkdir -p uploads data
 EXPOSE 8787
 CMD ["npm","start"]
