@@ -41,7 +41,35 @@ export function createAssetHubRouter() {
   r.use(express.json({ limit: "2mb" }));
   r.get("/api/assets/health", (_req, res) => res.json({ ok: true, service: "asset-hub" }));
 
-  // URL source handlers intentionally precede the legacy handlers in server/index.js.
+  // Direct MP3 URLs do not need yt-dlp metadata extraction.
+  // This route intentionally falls through for every other source so the full yt-dlp handler still runs.
+  r.post("/api/playlist-info", (req, res, next) => {
+    const url = String(req.body?.url || "").trim();
+    try {
+      const parsed = new URL(url);
+      if (!["http:", "https:"].includes(parsed.protocol) || !parsed.pathname.toLowerCase().endsWith(".mp3")) return next();
+      const filename = path.basename(parsed.pathname) || "track.mp3";
+      const title = path.basename(filename, path.extname(filename)).replace(/[-_]+/g, " ").trim().slice(0, 100) || "Track";
+      return res.json({
+        isPlaylist: false,
+        playlistTitle: null,
+        total: 1,
+        limited: false,
+        items: [{
+          id: crypto.createHash("sha1").update(url).digest("hex").slice(0, 16),
+          title,
+          duration: 0,
+          duration_string: "",
+          thumbnail: null,
+          uploader: "",
+          webpage_url: url,
+          playlist_title: null,
+        }],
+      });
+    } catch { return next(); }
+  });
+
+  // URL source handlers intentionally precede legacy URL handlers in server/index.js.
   mountUrlSourceRoutes(r);
 
   r.post("/api/assets/upload", upload.single("file"), async (req, res) => {
