@@ -12,9 +12,12 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY . .
 
-# Playlist fix: the shared yt-dlp flags intentionally use --no-playlist for single URLs.
-# The playlist-info route must explicitly override that behavior with --yes-playlist.
-RUN sed -i '/"--flat-playlist",/a\        "--yes-playlist",' server/url-source.js
+# Keep the existing source handlers as fallback, but put the robust downloader first.
+RUN sed -i '1i import { mountYtDownloadFallback } from "./youtube-download-fallback.js";' server/asset-preload.js \
+    && sed -i 's/const r=express.Router();/const r=express.Router();mountYtDownloadFallback(r);/' server/asset-preload.js
+
+# Load the polished playlist UI after the existing app/pagination scripts.
+RUN sed -i 's#<script src="/audio-studio.js"></script>#<script src="/audio-studio.js"></script><script src="/playlist-ui-fix.js"></script>#' public/index.html
 
 RUN mkdir -p uploads data
 EXPOSE 8787
