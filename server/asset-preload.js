@@ -5,6 +5,7 @@ import crypto from "crypto";
 import express from "express";
 import multer from "multer";
 import { uploadGenericAsset, getGenericAsset } from "./asset-hub.js";
+import { mountUrlSourceRoutes } from "./url-source.js";
 
 const API_BASE = "https://apis.roblox.com";
 const MAX_BYTES = 20 * 1024 * 1024;
@@ -38,6 +39,9 @@ function normalizeAssetType(value) {
 export function createAssetHubRouter() {
   const r = express.Router();
   r.get("/api/assets/health", (_req, res) => res.json({ ok: true, service: "asset-hub" }));
+
+  // Mount URL-source handlers first so they take precedence over legacy URL routes in server/index.js.
+  mountUrlSourceRoutes(r);
 
   r.post("/api/assets/upload", upload.single("file"), async (req, res) => {
     let temp = null;
