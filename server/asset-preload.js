@@ -38,9 +38,10 @@ function normalizeAssetType(value) {
 
 export function createAssetHubRouter() {
   const r = express.Router();
+  r.use(express.json({ limit: "2mb" }));
   r.get("/api/assets/health", (_req, res) => res.json({ ok: true, service: "asset-hub" }));
 
-  // Mount URL-source handlers first so they take precedence over legacy URL routes in server/index.js.
+  // URL source handlers intentionally precede the legacy handlers in server/index.js.
   mountUrlSourceRoutes(r);
 
   r.post("/api/assets/upload", upload.single("file"), async (req, res) => {
