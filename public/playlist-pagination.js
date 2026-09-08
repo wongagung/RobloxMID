@@ -1,177 +1,494 @@
-/* RobloxMID playlist pagination UI. Loaded after app.js by the /app.js wrapper. */
-(function(){
-  const $=s=>document.querySelector(s),u=$("#urlInput"),info=$("#urlInfoBtn"),card=$("#playlistCard"),list=$("#playlistItems"),title=$("#playlistTitle"),meta=$("#playlistMeta"),dl=$("#playlistDownloadBtn"),all=$("#playlistSelectAll"),prog=$("#playlistProgress"),bar=$("#playlistProgBar"),txt=$("#playlistProgText"),preview=$("#urlPreviewCard"),status=$("#urlStatus"),statusText=$("#urlStatusText");
-  if(!u||!info||!card||!list)return;
+/* RobloxMID canonical playlist UI + queue integration. */
+(function () {
+  "use strict";
 
-  const SIZE=50;
-  let url="",page=1,cap=100,next=false,busy=false,items=[],selected=new Set(),selectedItems=new Map();
+  const $ = selector => document.querySelector(selector);
+  const input = $("#urlInput");
+  const infoButton = $("#urlInfoBtn");
+  const card = $("#playlistCard");
+  const list = $("#playlistItems");
+  const titleEl = $("#playlistTitle");
+  const metaEl = $("#playlistMeta");
+  const selectAllButton = $("#playlistSelectAll");
+  const downloadButton = $("#playlistDownloadBtn");
+  const progress = $("#playlistProgress");
+  const progressBar = $("#playlistProgBar");
+  const progressText = $("#playlistProgText");
+  const preview = $("#urlPreviewCard");
+  const status = $("#urlStatus");
+  const statusText = $("#urlStatusText");
 
-  const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
-  const normalizeUrl=value=>{
-    let s=String(value??"").trim();
-    for(let i=0;i<2;i++){
-      try{const d=decodeURIComponent(s);if(d===s)break;s=d.trim()}catch{break}
+  if (!input || !infoButton || !card || !list) return;
+
+  const PAGE_SIZE = 50;
+  let sourceUrl = "";
+  let page = 1;
+  let maxItems = 100;
+  let hasNext = false;
+  let loading = false;
+  let currentItems = [];
+  const selectedIds = new Set();
+  const selectedItems = new Map();
+
+  function normalizeUrl(value) {
+    let url = String(value ?? "").trim();
+    for (let i = 0; i < 2; i++) {
+      try {
+        const decoded = decodeURIComponent(url);
+        if (decoded === url) break;
+        url = decoded.trim();
+      } catch {
+        break;
+      }
     }
-    s=s.replace(/&amp;/gi,"&").replace(/^\s*[`'\"]+/,"").replace(/[`'\"]+\s*$/,"").trim();
-    if(s&&!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)&&/^(?:www\.)?(?:youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com)/i.test(s))s=`https://${s}`;
-    return s;
-  };
-  const isYoutubeId=id=>/^[A-Za-z0-9_-]{11}$/.test(String(id||""));
-  const thumbnailFor=item=>{
-    const supplied=String(item?.thumbnail||"").trim();
-    if(supplied)return supplied;
-    const id=String(item?.id||"").trim();
-    if(isYoutubeId(id))return `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg`;
-    return "";
-  };
-  const setStatus=(msg,error=false)=>{if(status&&statusText){status.className=`url-status ${error?'error':'info'}`;status.classList.remove('hidden');statusText.textContent=msg}};
+    url = url
+      .replace(/&amp;/gi, "&")
+      .replace(/^\s*[`'\"]+/, "")
+      .replace(/[`'\"]+\s*$/, "")
+      .trim();
+    if (url && !/^[a-z][a-z0-9+.-]*:\/\//i.test(url) && /^(?:www\.)?(?:youtube\.com|youtu\.be|music\.youtube\.com|soundcloud\.com)/i.test(url)) {
+      url = `https://${url}`;
+    }
+    return url;
+  }
 
-  function css(){
-    if($("#plPagerCss"))return;
-    const s=document.createElement("style");
-    s.id="plPagerCss";
-    s.textContent=`
-      #playlistCard{margin-top:14px;padding:14px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.025)}
-      #playlistCard .playlist-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:12px;border-bottom:1px solid var(--line)}
-      #playlistCard .playlist-head>div:first-child{min-width:0;flex:1}
-      #playlistCard .playlist-actions{display:flex;gap:7px;flex-wrap:wrap;align-items:center;flex-shrink:0}
-      #playlistCard .playlist-items{display:flex;flex-direction:column;gap:6px;margin-top:11px;max-height:520px;overflow:auto;padding-right:3px}
-      #playlistCard .playlist-item{display:grid;grid-template-columns:20px 44px minmax(0,1fr);gap:10px;align-items:center;padding:8px;border:1px solid transparent;border-radius:12px;background:#ffffff03;transition:.15s}
-      #playlistCard .playlist-item:hover{border-color:var(--line);background:#ffffff06}
-      #playlistCard .playlist-item input{accent-color:#8b5cf6}
-      #playlistCard .pl-thumb{width:44px;height:44px;border-radius:9px;object-fit:cover;background:#0b1020;display:block}
+  function canonicalItemUrl(item) {
+    const raw = normalizeUrl(item?.webpage_url || item?.original_url || item?.url || sourceUrl);
+    const id = String(item?.id || "").trim();
+    try {
+      const parsed = new URL(raw);
+      const host = parsed.hostname.toLowerCase();
+      if ((host === "youtube.com" || host === "www.youtube.com" || host === "music.youtube.com" || host === "youtu.be" || host === "www.youtu.be") && id) {
+        return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+      }
+    } catch {}
+    if (id && /^(?:[A-Za-z0-9_-]{11})$/.test(id) && /(?:youtube\.com|youtu\.be)$/i.test(raw)) {
+      return `https://www.youtube.com/watch?v=${encodeURIComponent(id)}`;
+    }
+    return raw;
+  }
+
+  function youtubeThumbnail(item) {
+    const supplied = normalizeUrl(item?.thumbnail || "");
+    if (supplied) return supplied;
+    const id = String(item?.id || "").trim();
+    if (/^[A-Za-z0-9_-]{11}$/.test(id)) return `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+    return "";
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    })[char]);
+  }
+
+  function showStatus(message, isError = false) {
+    if (!status || !statusText) return;
+    statusText.textContent = message;
+    status.className = `url-status ${isError ? "error" : "info"}`;
+    status.classList.remove("hidden");
+  }
+
+  function hideStatus() {
+    status?.classList.add("hidden");
+  }
+
+  function injectStyles() {
+    if ($("#robloxMidCanonicalPlaylistStyles")) return;
+    const style = document.createElement("style");
+    style.id = "robloxMidCanonicalPlaylistStyles";
+    style.textContent = `
+      #playlistCard{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:18px;background:var(--panel-bg,rgba(255,255,255,.025));overflow:hidden}
+      #playlistCard .playlist-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:14px;border-bottom:1px solid var(--line)}
+      #playlistCard .playlist-title{font-size:15px;line-height:1.35;font-weight:800;color:var(--text);white-space:normal;overflow-wrap:anywhere;word-break:break-word}
+      #playlistCard .playlist-meta{margin-top:5px;font-size:11px;line-height:1.4;color:var(--muted)}
+      #playlistCard .playlist-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;flex:0 0 auto}
+      #playlistCard .playlist-items{display:flex;flex-direction:column;gap:7px;margin-top:14px;max-height:540px;overflow:auto;padding-right:3px}
+      #playlistCard .playlist-item{display:grid;grid-template-columns:20px 48px minmax(0,1fr);gap:11px;align-items:center;padding:9px 10px;border:1px solid transparent;border-radius:12px;background:rgba(255,255,255,.02);transition:background .15s,border-color .15s}
+      #playlistCard .playlist-item:hover{border-color:var(--line);background:rgba(255,255,255,.045)}
+      #playlistCard .playlist-item input{margin:0;accent-color:#8b5cf6}
+      #playlistCard .pl-thumb{display:block;width:48px;height:48px;border-radius:10px;object-fit:cover;background:#0b1020;border:1px solid var(--line)}
       #playlistCard .pl-meta{min-width:0}
-      #playlistCard .pl-title{font-size:12px;font-weight:700;white-space:normal;overflow:visible;text-overflow:clip;line-height:1.35;overflow-wrap:anywhere}
-      #playlistCard .pl-sub{font-size:10px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      #playlistTitle{white-space:normal!important;overflow:visible!important;text-overflow:clip!important;overflow-wrap:anywhere;line-height:1.25}
-      .playlist-pagination{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;padding:12px 0 2px;margin-top:10px;border-top:1px solid var(--line)}
-      .playlist-page-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-      .playlist-page-info{font-size:10px;color:var(--muted)}
-      .playlist-page-btn,.playlist-limit{border:1px solid var(--line);background:#ffffff05;color:var(--text);border-radius:9px;padding:7px 10px;font-size:11px;font-weight:700;cursor:pointer}
-      .playlist-page-btn:disabled{opacity:.4;cursor:not-allowed}
-      .playlist-limit{outline:none}
-      .playlist-selection-count{font-size:10px;color:#a78bfa;font-weight:800;margin-top:3px}
+      #playlistCard .pl-title{font-size:12px;font-weight:750;line-height:1.35;white-space:normal;overflow-wrap:anywhere;word-break:break-word;color:var(--text)}
+      #playlistCard .pl-sub{margin-top:4px;font-size:10px;line-height:1.3;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      #playlistPagination{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:14px;padding-top:14px;border-top:1px solid var(--line)}
+      #playlistPagination .pager-summary{min-width:0;font-size:10px;line-height:1.4;color:var(--muted)}
+      #playlistPagination .pager-selected{margin-top:2px;font-weight:800;color:#a78bfa}
+      #playlistPagination .pager-actions{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+      #playlistPagination button,#playlistPagination select{min-height:34px;padding:7px 10px;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.03);color:var(--text);font-size:11px;font-weight:750}
+      #playlistPagination button{cursor:pointer}
+      #playlistPagination button:disabled{opacity:.45;cursor:not-allowed}
+      #queuePanel{margin-top:18px}
+      #queuePanel .queue-list{display:flex;flex-direction:column;gap:8px}
+      #queuePanel .queue-item{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:11px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:12px;background:rgba(255,255,255,.018)}
+      #queuePanel .queue-thumb{width:48px;height:48px;display:block;object-fit:cover;border-radius:10px;background:#0b1020;border:1px solid var(--line)}
+      #queuePanel .queue-meta{min-width:0}
+      #queuePanel .queue-title{font-size:12px;font-weight:800;line-height:1.35;white-space:normal;overflow-wrap:anywhere;word-break:break-word;color:var(--text)}
+      #queuePanel .queue-status-text{margin-top:4px;font-size:10px;line-height:1.35;color:var(--muted)}
+      #queuePanel .queue-item-error .queue-status-text{color:#f87171}
+      #queuePanel .queue-item-ready .queue-status-text{color:#34d399}
+      #queuePanel .queue-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
+      #queuePanel .queue-actions button{width:auto!important;margin:0!important;min-height:34px;padding:7px 11px!important;font-size:11px!important}
+      #queuePanel .queue-error-detail{grid-column:2 / -1;margin-top:-2px;padding:8px 10px;border-radius:9px;background:rgba(248,113,113,.07);border:1px solid rgba(248,113,113,.16);color:#fca5a5;font-size:10px;line-height:1.45;overflow-wrap:anywhere}
       @media(max-width:700px){
         #playlistCard .playlist-head{flex-direction:column}
-        #playlistCard .playlist-actions{width:100%}
-        #playlistCard .playlist-actions>*{flex:1}
-        .playlist-pagination{align-items:flex-start;flex-direction:column}
-        .playlist-page-actions{width:100%}
-        .playlist-page-btn{flex:1}
+        #playlistCard .playlist-actions{width:100%;justify-content:stretch}
+        #playlistCard .playlist-actions button{flex:1}
+        #playlistPagination{align-items:flex-start;flex-direction:column}
+        #playlistPagination .pager-actions{width:100%}
+        #playlistPagination .pager-actions button,#playlistPagination .pager-actions select{flex:1}
+        #queuePanel .queue-item{grid-template-columns:44px minmax(0,1fr)}
+        #queuePanel .queue-actions{grid-column:1 / -1;justify-content:stretch}
+        #queuePanel .queue-actions button{flex:1}
+        #queuePanel .queue-error-detail{grid-column:1 / -1}
       }
     `;
-    document.head.appendChild(s)
+    document.head.appendChild(style);
   }
 
-  function controls(){
-    let p=$("#playlistPagination");
-    if(p)return p;
-    p=document.createElement("div");
-    p.id="playlistPagination";
-    p.className="playlist-pagination";
-    p.innerHTML='<div><div class="playlist-page-info" id="playlistPageInfo"></div><div class="playlist-selection-count" id="playlistSelectionCount">0 dipilih</div></div><div class="playlist-page-actions"><select class="playlist-limit" id="playlistLimit"><option value="100">100 track</option><option value="500">500 track</option><option value="0">Semua track</option></select><button type="button" class="playlist-page-btn" id="playlistPrev">← Sebelumnya</button><button type="button" class="playlist-page-btn" id="playlistNext">Berikutnya →</button></div>';
-    card.appendChild(p);
-    $("#playlistLimit").onchange=async e=>{cap=Number(e.target.value);page=1;items=[];selected.clear();selectedItems.clear();await load(1,false)};
-    $("#playlistPrev").onclick=async()=>{if(page>1&&!busy)await load(page-1,false)};
-    $("#playlistNext").onclick=async()=>{if(next&&!busy)await load(page+1,false)};
-    return p
+  function ensurePagination() {
+    let pager = $("#playlistPagination");
+    if (pager) return pager;
+    pager = document.createElement("div");
+    pager.id = "playlistPagination";
+    pager.innerHTML = `
+      <div class="pager-summary">
+        <div id="playlistPageInfo"></div>
+        <div id="playlistSelectionCount" class="pager-selected">0 dipilih</div>
+      </div>
+      <div class="pager-actions">
+        <button type="button" id="playlistPrev">← Sebelumnya</button>
+        <button type="button" id="playlistNext">Berikutnya →</button>
+        <select id="playlistLimit" aria-label="Batas playlist">
+          <option value="100">100 track</option>
+          <option value="500">500 track</option>
+          <option value="0">Semua track</option>
+        </select>
+      </div>`;
+    card.appendChild(pager);
+
+    $("#playlistPrev").onclick = () => { if (page > 1 && !loading) loadPage(page - 1); };
+    $("#playlistNext").onclick = () => { if (hasNext && !loading) loadPage(page + 1); };
+    $("#playlistLimit").onchange = () => {
+      maxItems = Number($("#playlistLimit").value);
+      page = 1;
+      selectedIds.clear();
+      selectedItems.clear();
+      loadPage(1);
+    };
+    return pager;
   }
 
-  function update(){
-    if(dl){dl.disabled=!selectedItems.size;dl.textContent=selectedItems.size?`⬇ Download ${selectedItems.size} Track`:"⬇ Download Terpilih"}
-    const i=$("#playlistPageInfo"),sc=$("#playlistSelectionCount"),p=$("#playlistPrev"),n=$("#playlistNext"),s=$("#playlistLimit");
-    if(i)i.textContent=`Halaman ${page} · ${items.length} tampil · batas ${cap===0?'Semua':cap}`;
-    if(sc)sc.textContent=`${selectedItems.size} dipilih`;
-    if(p)p.disabled=busy||page<=1;
-    if(n)n.disabled=busy||!next;
-    if(s)s.value=String(cap)
+  function updateControls() {
+    const pageInfo = $("#playlistPageInfo");
+    const selectedInfo = $("#playlistSelectionCount");
+    const prev = $("#playlistPrev");
+    const next = $("#playlistNext");
+    const limit = $("#playlistLimit");
+
+    const loadedStart = currentItems.length ? ((page - 1) * PAGE_SIZE) + 1 : 0;
+    const loadedEnd = currentItems.length ? ((page - 1) * PAGE_SIZE) + currentItems.length : 0;
+    if (pageInfo) pageInfo.textContent = `Halaman ${page} · ${loadedStart}–${loadedEnd}${hasNext ? "+" : ""}`;
+    if (selectedInfo) selectedInfo.textContent = `${selectedItems.size} dipilih`;
+    if (prev) prev.disabled = loading || page <= 1;
+    if (next) next.disabled = loading || !hasNext;
+    if (limit) limit.value = String(maxItems);
+    if (downloadButton) {
+      downloadButton.disabled = loading || selectedItems.size === 0;
+      downloadButton.textContent = selectedItems.size ? `⬇ Download ${selectedItems.size} Track` : "⬇ Download Terpilih";
+    }
+    if (selectAllButton) {
+      const allSelected = currentItems.length > 0 && currentItems.every(item => selectedIds.has(String(item.id)));
+      selectAllButton.textContent = allSelected ? "Batal Pilih" : "Pilih Semua";
+    }
   }
 
-  function render(){
-    list.innerHTML=items.map((x,i)=>{
-      const id=String(x.id??"");
-      const thumb=thumbnailFor(x);
-      return `<label class="playlist-item" data-pidx="${i}"><input type="checkbox" class="pl-check-paged" data-id="${esc(id)}" ${selected.has(id)?'checked':''}><img class="pl-thumb" src="${esc(thumb)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'"><div class="pl-meta"><div class="pl-title" title="${esc(x.title||'Unknown')}">${esc(x.title||'Unknown')}</div><div class="pl-sub" title="${esc(x.uploader||'')}">${esc(x.uploader||'')}${x.duration_string?' · ⏱ '+esc(x.duration_string):''}</div></div></label>`
-    }).join('');
-    list.querySelectorAll('.pl-check-paged').forEach(c=>c.onchange=()=>{
-      const id=String(c.dataset.id),item=items.find(x=>String(x.id)===id);
-      if(c.checked){selected.add(id);if(item)selectedItems.set(id,{...item,thumbnail:thumbnailFor(item)})}
-      else{selected.delete(id);selectedItems.delete(id)}
-      update()
+  function renderItems() {
+    list.innerHTML = currentItems.map((item, index) => {
+      const id = String(item.id || `row-${index}`);
+      const thumb = youtubeThumbnail(item);
+      const title = String(item.title || "Untitled");
+      const uploader = String(item.uploader || "");
+      const duration = String(item.duration_string || "");
+      return `
+        <label class="playlist-item" data-index="${index}">
+          <input type="checkbox" class="playlist-check" data-id="${escapeHtml(id)}" ${selectedIds.has(id) ? "checked" : ""}>
+          <img class="pl-thumb" src="${escapeHtml(thumb)}" alt="" loading="lazy" data-video-id="${escapeHtml(id)}">
+          <div class="pl-meta">
+            <div class="pl-title" title="${escapeHtml(title)}">${escapeHtml(title)}</div>
+            <div class="pl-sub">${escapeHtml(uploader)}${duration ? ` · ⏱ ${escapeHtml(duration)}` : ""}</div>
+          </div>
+        </label>`;
+    }).join("");
+
+    list.querySelectorAll(".playlist-check").forEach(check => {
+      check.onchange = () => {
+        const id = String(check.dataset.id);
+        const item = currentItems.find(entry => String(entry.id) === id);
+        if (check.checked) {
+          selectedIds.add(id);
+          if (item) selectedItems.set(id, { ...item, webpage_url: canonicalItemUrl(item) });
+        } else {
+          selectedIds.delete(id);
+          selectedItems.delete(id);
+        }
+        updateControls();
+      };
     });
-    update()
+
+    list.querySelectorAll(".pl-thumb").forEach(image => {
+      const id = String(image.dataset.videoId || "");
+      if (!/^[A-Za-z0-9_-]{11}$/.test(id)) return;
+      image.onerror = () => {
+        const fallback = `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`;
+        if (image.src !== fallback) {
+          image.src = fallback;
+          return;
+        }
+        image.style.display = "none";
+      };
+    });
+
+    updateControls();
   }
 
-  async function load(p,append){
-    busy=true;update();
-    try{
-      const incomingUrl=normalizeUrl(url);
-      if(!incomingUrl)throw Error('Masukkan URL terlebih dahulu.');
-      url=incomingUrl;u.value=incomingUrl;
-      const q=new URLSearchParams({page:String(p),pageSize:String(SIZE),maxItems:String(cap)});
-      const r=await fetch(`/api/playlist-info?${q}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:incomingUrl})});
-      const d=await r.json().catch(()=>({}));
-      if(!r.ok)throw Error(d.error||'Gagal mengambil playlist.');
-      if(!d.isPlaylist&&d.items?.length===1){
-        const x=d.items[0];
-        preview?.classList.remove('hidden');
-        const th=$("#urlThumb"),tt=$("#urlTitle"),up=$("#urlUploader"),du=$("#urlDuration"),fb=$("#urlFetchBtn");
-        if(th){th.src=thumbnailFor(x);th.classList.toggle('hidden',!thumbnailFor(x))}
-        if(tt)tt.textContent=x.title||'Track';
-        if(up)up.textContent=x.uploader||'';
-        if(du)du.textContent=x.duration_string?`⏱ ${x.duration_string}`:'';
-        if(fb)fb.disabled=false;
-        card.classList.add('hidden');next=false;return
+  function addQueueItem(item) {
+    if (typeof _downloadQueue === "undefined") return null;
+    const normalized = {
+      id: String(item.id || cryptoSafeId(item)),
+      title: String(item.title || "Track"),
+      thumbnail: youtubeThumbnail(item),
+      url: canonicalItemUrl(item),
+      file: null,
+      status: "waiting",
+      errorMessage: ""
+    };
+    _downloadQueue.push(normalized);
+    return _downloadQueue.length - 1;
+  }
+
+  function cryptoSafeId(item) {
+    const raw = canonicalItemUrl(item);
+    let hash = 0;
+    for (let i = 0; i < raw.length; i++) hash = ((hash << 5) - hash + raw.charCodeAt(i)) | 0;
+    return `url-${Math.abs(hash)}`;
+  }
+
+  function renderQueueWithDetails() {
+    if (typeof renderQueue === "function") renderQueue();
+    const queueList = $("#queueList");
+    if (!queueList || typeof _downloadQueue === "undefined") return;
+    queueList.querySelectorAll(".queue-item").forEach(row => {
+      const index = Number(row.dataset.qi);
+      const item = _downloadQueue[index];
+      if (!item?.errorMessage) return;
+      const detail = document.createElement("div");
+      detail.className = "queue-error-detail";
+      detail.textContent = item.errorMessage;
+      row.appendChild(detail);
+    });
+  }
+
+  async function downloadOne(item, queueIndex, overallIndex, total) {
+    const queueItem = _downloadQueue?.[queueIndex];
+    if (!queueItem) return false;
+    queueItem.status = "waiting";
+    queueItem.errorMessage = "";
+    renderQueueWithDetails();
+
+    return new Promise(resolve => {
+      const eventSource = new EventSource(`/api/fetch-url-stream?url=${encodeURIComponent(queueItem.url)}`);
+      let finished = false;
+
+      const finish = ok => {
+        if (finished) return;
+        finished = true;
+        eventSource.close();
+        renderQueueWithDetails();
+        resolve(ok);
+      };
+
+      eventSource.addEventListener("progress", event => {
+        try {
+          const data = JSON.parse(event.data);
+          if (progressText) progressText.textContent = `Mendownload ${overallIndex}/${total}: ${queueItem.title}${data.percent !== undefined ? ` · ${Math.round(data.percent)}%` : ""}`;
+          if (progressBar && data.percent !== undefined) progressBar.style.width = `${Math.max(0, Math.min(100, Number(data.percent)))}%`;
+        } catch {}
+      });
+
+      eventSource.addEventListener("file", event => {
+        try {
+          const data = JSON.parse(event.data);
+          const binary = atob(data.data || "");
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+          const blob = new Blob([bytes], { type: data.mimeType || "audio/mpeg" });
+          const filename = `${String(data.title || queueItem.title).replace(/[\\/:*?\"<>|]/g, "_")}.mp3`;
+          queueItem.file = new File([blob], filename, { type: blob.type });
+          queueItem.title = String(data.title || queueItem.title);
+          queueItem.status = "ready";
+          finish(true);
+        } catch (error) {
+          queueItem.status = "error";
+          queueItem.errorMessage = `Hasil download tidak dapat dibaca: ${error.message}`;
+          finish(false);
+        }
+      });
+
+      eventSource.addEventListener("error", event => {
+        let message = "Download gagal.";
+        try {
+          const data = JSON.parse(event.data || "{}");
+          if (data.message) message = data.code ? `${data.message} (${data.code})` : data.message;
+        } catch {}
+        queueItem.status = "error";
+        queueItem.errorMessage = message;
+        finish(false);
+      });
+
+      eventSource.onerror = () => {
+        if (finished) return;
+        queueItem.status = "error";
+        queueItem.errorMessage = "Koneksi download terputus atau server tidak merespons.";
+        finish(false);
+      };
+    });
+  }
+
+  async function downloadSelected() {
+    if (!selectedItems.size || loading || typeof _downloadQueue === "undefined") return;
+    const chosen = [...selectedItems.values()].map(item => ({ ...item, webpage_url: canonicalItemUrl(item) }));
+    if (!chosen.length) return;
+
+    downloadButton.disabled = true;
+    selectAllButton && (selectAllButton.disabled = true);
+    progress?.classList.remove("hidden");
+    if (progressBar) progressBar.style.width = "0%";
+
+    const firstQueueIndex = _downloadQueue.length;
+    chosen.forEach(addQueueItem);
+    renderQueueWithDetails();
+
+    let okCount = 0;
+    for (let i = 0; i < chosen.length; i++) {
+      const queueIndex = firstQueueIndex + i;
+      const ok = await downloadOne(chosen[i], queueIndex, i + 1, chosen.length);
+      if (ok) okCount++;
+      if (progressBar) progressBar.style.width = `${Math.round(((i + 1) / chosen.length) * 100)}%`;
+    }
+
+    if (progressText) progressText.textContent = `✓ ${okCount}/${chosen.length} track siap diedit`;
+    renderQueueWithDetails();
+    downloadButton.disabled = false;
+    selectAllButton && (selectAllButton.disabled = false);
+    updateControls();
+  }
+
+  async function loadPage(targetPage) {
+    if (loading || !sourceUrl || targetPage < 1) return;
+    loading = true;
+    updateControls();
+    try {
+      const normalized = normalizeUrl(sourceUrl);
+      sourceUrl = normalized;
+      input.value = normalized;
+      const params = new URLSearchParams({
+        page: String(targetPage),
+        pageSize: String(PAGE_SIZE),
+        maxItems: String(maxItems)
+      });
+      const response = await fetch(`/api/playlist-info?${params.toString()}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: normalized })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Gagal mengambil playlist.");
+
+      if (!data.isPlaylist && Array.isArray(data.items) && data.items.length === 1) {
+        const item = data.items[0];
+        const thumb = youtubeThumbnail(item);
+        $("#urlTitle") && ($("#urlTitle").textContent = item.title || "Track");
+        $("#urlUploader") && ($("#urlUploader").textContent = item.uploader || "");
+        $("#urlDuration") && ($("#urlDuration").textContent = item.duration_string ? `⏱ ${item.duration_string}` : "");
+        const image = $("#urlThumb");
+        if (image) {
+          image.src = thumb;
+          image.classList.toggle("hidden", !thumb);
+        }
+        $("#urlFetchBtn") && ($("#urlFetchBtn").disabled = false);
+        card.classList.add("hidden");
+        preview?.classList.remove("hidden");
+        hasNext = false;
+        return;
       }
-      const incoming=(d.items||[]).map(x=>({...x,thumbnail:thumbnailFor(x)}));
-      incoming.forEach(x=>{if(selected.has(String(x.id)))selectedItems.set(String(x.id),x)});
-      items=append?[...items,...incoming]:incoming;
-      page=Number(d.page||p);next=!!d.hasNext;
-      const playlistName=String(d.playlistTitle||incoming.find(x=>x.playlist_title)?.playlist_title||'Playlist').trim()||'Playlist';
-      title.textContent=playlistName;title.title=playlistName;
-      meta.textContent=cap===0?`${items.length}${next?'+':''} track dimuat`:`${items.length}/${cap} track dimuat`;
-      card.classList.remove('hidden');preview?.classList.add('hidden');render()
-    }catch(e){card.classList.add('hidden');setStatus('✗ '+(e.message||'Gagal mengambil playlist.'),true)}
-    finally{busy=false;update()}
+
+      page = Number(data.page || targetPage);
+      hasNext = Boolean(data.hasNext);
+      currentItems = Array.isArray(data.items) ? data.items : [];
+      currentItems.forEach(item => {
+        const id = String(item.id);
+        if (selectedIds.has(id)) selectedItems.set(id, { ...item, webpage_url: canonicalItemUrl(item) });
+      });
+
+      titleEl.textContent = String(data.playlistTitle || "Playlist");
+      metaEl.textContent = `${currentItems.length} track di halaman ini${hasNext ? " · masih ada lanjutan" : ""}`;
+      card.classList.remove("hidden");
+      preview?.classList.add("hidden");
+      ensurePagination();
+      renderItems();
+      hideStatus();
+    } catch (error) {
+      card.classList.add("hidden");
+      showStatus(`✗ ${error.message || "Gagal mengambil playlist."}`, true);
+    } finally {
+      loading = false;
+      updateControls();
+    }
   }
 
-  async function check(){
-    url=normalizeUrl(u.value);
-    if(!url){setStatus('✗ Masukkan URL lengkap.',true);return}
-    u.value=url;page=1;items=[];selected.clear();selectedItems.clear();css();controls();if(preview)preview.classList.add('hidden');setStatus('⏳ Memuat playlist...');await load(1,false);if(!busy&&status&&!status.classList.contains('error'))status.classList.add('hidden')
+  async function checkPlaylist() {
+    const normalized = normalizeUrl(input.value);
+    if (!normalized) {
+      showStatus("✗ Masukkan URL terlebih dahulu.", true);
+      return;
+    }
+    sourceUrl = normalized;
+    page = 1;
+    currentItems = [];
+    selectedIds.clear();
+    selectedItems.clear();
+    injectStyles();
+    ensurePagination();
+    input.value = normalized;
+    showStatus("⏳ Memuat playlist...");
+    await loadPage(1);
   }
 
-  all&&(all.onclick=()=>{
-    const c=list.querySelectorAll('.pl-check-paged'),on=[...c].some(x=>!x.checked);
-    c.forEach(x=>{
-      x.checked=on;const id=String(x.dataset.id),item=items.find(v=>String(v.id)===id);
-      if(on){selected.add(id);if(item)selectedItems.set(id,{...item,thumbnail:thumbnailFor(item)})}
-      else{selected.delete(id);selectedItems.delete(id)}
-    });
-    update()
-  });
+  if (selectAllButton) {
+    selectAllButton.onclick = () => {
+      const allSelected = currentItems.length > 0 && currentItems.every(item => selectedIds.has(String(item.id)));
+      currentItems.forEach(item => {
+        const id = String(item.id);
+        if (allSelected) {
+          selectedIds.delete(id);
+          selectedItems.delete(id);
+        } else {
+          selectedIds.add(id);
+          selectedItems.set(id, { ...item, webpage_url: canonicalItemUrl(item) });
+        }
+      });
+      renderItems();
+    };
+  }
 
-  dl&&(dl.onclick=async()=>{
-    if(!selectedItems.size||!url||busy)return;
-    while(next&&(cap===0||items.length<cap)){
-      const before=page;await load(page+1,true);if(page===before)break
-    }
-    const chosen=[...selectedItems.values()];
-    if(!chosen.length)return;
-    dl.disabled=true;all&&(all.disabled=true);prog?.classList.remove('hidden');
-    const start=_downloadQueue.length;
-    chosen.forEach(x=>_downloadQueue.push({id:x.id,title:x.title,thumbnail:thumbnailFor(x),url:x.webpage_url,file:null,status:'waiting'}));
-    renderQueue();
-    for(let i=0;i<chosen.length;i++){
-      const qi=start+i;
-      if(txt)txt.textContent=`Mendownload ${i+1}/${chosen.length}: ${chosen[i].title}`;
-      if(bar)bar.style.width=(i/chosen.length*100)+'%';
-      await downloadQueueItem(qi)
-    }
-    if(bar)bar.style.width='100%';
-    if(txt)txt.textContent=`✓ ${chosen.length} track masuk antrian — edit & upload satu per satu!`;
-    dl.disabled=false;all&&(all.disabled=false);update()
-  });
+  if (downloadButton) downloadButton.onclick = downloadSelected;
+  infoButton.onclick = checkPlaylist;
 
-  info.onclick=check;
+  injectStyles();
+  updateControls();
 })();
