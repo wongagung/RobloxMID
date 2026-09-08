@@ -22,17 +22,21 @@ jobs:
       - name: Install dependencies
         run: npm ci --omit=dev
 
-      - name: Syntax check backend
+      - name: Syntax check every JavaScript file
         run: |
-          node --check server/asset-hub.js
-          node --check server/asset-preload.js
-          node --check server/index.js
-          node --check server/roblox.js
+          find server public -type f -name '*.js' -print0 | xargs -0 -n1 node --check
 
-      - name: Syntax check Asset Hub frontend
+      - name: Reject accidental CommonJS in ESM server
         run: |
-          node --check public/assets/app.js
-          node --check public/assets/pro-features.js
+          if grep -R -nE '(^|[^A-Za-z])(require\(|module\.exports)' server --include='*.js'; then
+            echo 'CommonJS syntax found in server/. package.json uses type=module.'
+            exit 1
+          fi
+
+      - name: Validate environment template
+        run: |
+          test -s .env.example
+          ! grep -nE '(^|[[:space:]])-e([[:space:]]|$)' .env.example
 
       - name: Validate Asset Hub HTML wiring
         run: |
