@@ -25,6 +25,7 @@
     #queuePanel .queue-error-detail{margin-top:6px !important;padding:6px 8px !important;border:1px solid #fb71851f !important;border-radius:8px !important;background:#fb718508 !important;color:#fda4af !important;font-size:10px !important;line-height:1.4 !important;white-space:normal !important;overflow-wrap:anywhere !important}
     #queuePanel .queue-download-progress{height:4px !important;margin-top:7px !important;border-radius:999px !important;overflow:hidden !important;background:#ffffff0a !important}
     #queuePanel .queue-download-progress>i{display:block !important;height:100% !important;background:linear-gradient(90deg,#8b5cf6,#22d3ee) !important;transition:width .15s ease !important}
+
     #playlistPagination select,.playlist-limit-select,#queuePanel select,select.ui-select{appearance:none !important;-webkit-appearance:none !important;min-height:36px !important;min-width:118px !important;padding:8px 38px 8px 12px !important;border:1px solid var(--line) !important;border-radius:10px !important;background-color:#080b13 !important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2398A2B3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;background-repeat:no-repeat !important;background-position:right 12px center !important;background-size:14px 14px !important;color:var(--text) !important;font:inherit !important;font-size:11px !important;font-weight:750 !important;line-height:1.2 !important;outline:none !important;cursor:pointer !important;color-scheme:dark !important;box-shadow:inset 0 1px 0 #ffffff08 !important}
     #playlistPagination select:focus,#queuePanel select:focus,select.ui-select:focus{border-color:#8b5cf666 !important;box-shadow:0 0 0 3px #8b5cf612 !important}
     #playlistPagination select:hover,#queuePanel select:hover,select.ui-select:hover{border-color:#ffffff18 !important}
@@ -33,13 +34,22 @@
     body.light #playlistPagination select option,body.light #queuePanel select option,body.light select.ui-select option{background:#fff;color:#111827}
     #playlistPagination{align-items:center !important}
     #playlistPagination .pager-actions{display:flex !important;align-items:center !important;gap:7px !important;flex-wrap:wrap !important}
-    .toast{position:fixed !important;right:22px !important;bottom:22px !important;z-index:100 !important;min-width:280px !important;max-width:min(420px,calc(100vw - 44px)) !important;padding:12px 14px !important;border:1px solid var(--line) !important;border-radius:13px !important;background:rgba(17,21,33,.96) !important;box-shadow:0 18px 55px rgba(0,0,0,.4) !important;color:var(--text) !important;font-size:12px !important;line-height:1.4 !important;backdrop-filter:blur(16px) !important;transform:translateY(14px) scale(.98) !important;opacity:0 !important;pointer-events:none !important;transition:opacity .2s ease,transform .2s ease !important}
-    .toast.show{opacity:1 !important;transform:none !important}
-    .toast.success{border-color:#36e0a144 !important}
-    .toast.error{border-color:#fb718544 !important}
-    .toast.info{border-color:#22d3ee33 !important}
-    body.light .toast{background:rgba(255,255,255,.97) !important;color:#111827 !important}
-    #mlConfirm[hidden],#mlNotifyStack[hidden]{display:none !important}
+
+    #toast{display:none !important}
+    #mlNotifyStack{position:fixed;right:22px;bottom:22px;z-index:1100;display:flex;flex-direction:column;align-items:flex-end;gap:9px;width:min(420px,calc(100vw - 44px));pointer-events:none}
+    .ml-notify{position:relative;display:grid;grid-template-columns:32px minmax(0,1fr) 22px;align-items:center;gap:10px;width:100%;padding:11px 11px 11px 12px;border:1px solid var(--line);border-radius:13px;background:rgba(17,21,33,.96);box-shadow:0 18px 55px rgba(0,0,0,.4);color:var(--text);backdrop-filter:blur(16px);pointer-events:auto;animation:mlNotifyIn .2s ease}
+    .ml-notify-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:#22d3ee12;color:#67e8f9;font-weight:900;font-size:14px}
+    .ml-notify-body{min-width:0}
+    .ml-notify-title{font-size:11px;font-weight:850;line-height:1.2;color:var(--text)}
+    .ml-notify-message{margin-top:3px;font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
+    .ml-notify-close{width:22px;height:22px;padding:0 !important;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:7px;font-size:15px;line-height:1}
+    .ml-notify-close:hover{background:#ffffff08;color:var(--text)}
+    .ml-notify.success{border-color:#36e0a144}.ml-notify.success .ml-notify-icon{background:#36e0a112;color:#6ee7b7}
+    .ml-notify.error{border-color:#fb718544}.ml-notify.error .ml-notify-icon{background:#fb718512;color:#fda4af}
+    .ml-notify.info{border-color:#22d3ee33}
+    @keyframes mlNotifyIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+
+    #mlConfirm[hidden]{display:none !important}
     #mlConfirm{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:20px}
     #mlConfirm .ml-backdrop{position:absolute;inset:0;background:rgba(3,6,12,.68);backdrop-filter:blur(7px)}
     #mlConfirm .ml-dialog{position:relative;width:min(430px,100%);padding:22px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(145deg,#141a2a,#0d111c);box-shadow:0 28px 90px rgba(0,0,0,.52)}
@@ -51,9 +61,11 @@
     #mlConfirm .ml-cancel{background:#ffffff05;color:var(--text)}
     #mlConfirm .ml-ok{border-color:#fb718544;background:#fb71851a;color:#fda4af}
     body.light #mlConfirm .ml-dialog{background:#fff}
+    body.light .ml-notify{background:rgba(255,255,255,.97);color:#111827}
+
     @media(max-width:700px){#queuePanel.queue-panel{padding:18px !important}#queuePanel .panel-head{align-items:flex-start !important}#queuePanel .queue-item{grid-template-columns:42px minmax(0,1fr) !important;gap:12px !important;padding:13px 0 !important}#queuePanel .queue-thumb{width:42px !important;height:42px !important}#queuePanel .queue-actions{grid-column:2 !important;justify-content:flex-start !important;min-width:0 !important}#queuePanel .queue-title{white-space:normal !important;overflow-wrap:anywhere !important}}
     @media(max-width:480px){#queuePanel.queue-panel{padding:16px !important}#queuePanel .queue-item{grid-template-columns:40px minmax(0,1fr) !important;gap:10px !important}#queuePanel .queue-thumb{width:40px !important;height:40px !important}#queuePanel .queue-actions{grid-column:1 / -1 !important}#queuePanel .panel-head{gap:10px !important}#queuePanel .panel-head h2{font-size:15px !important}}
-    @media(max-width:560px){.toast{right:12px !important;bottom:12px !important;min-width:0 !important;max-width:calc(100vw - 24px) !important}.ml-dialog{padding:18px !important}.ml-actions{flex-direction:column-reverse !important}.ml-actions button{width:100% !important}}
+    @media(max-width:560px){#mlNotifyStack{right:12px;bottom:12px;width:calc(100vw - 24px)}#mlConfirm .ml-dialog{padding:18px}#mlConfirm .ml-actions{flex-direction:column-reverse}#mlConfirm .ml-actions button{width:100%}}
   `;
 
   function ensureStyles(){
@@ -64,25 +76,50 @@
     document.head.appendChild(style);
   }
 
+  function ensureNotifyStack(){
+    let stack=document.getElementById("mlNotifyStack");
+    if(stack) return stack;
+    stack=document.createElement("div");
+    stack.id="mlNotifyStack";
+    stack.setAttribute("aria-live","polite");
+    stack.setAttribute("aria-atomic","false");
+    document.body.appendChild(stack);
+    return stack;
+  }
+
+  function notify(message,type="info",title=""){
+    const stack=ensureNotifyStack();
+    const item=document.createElement("div");
+    item.className=`ml-notify ${["success","error","info"].includes(type)?type:"info"}`;
+    const icon=type==="success"?"✓":type==="error"?"!":"i";
+    const heading=title||(type==="success"?"Berhasil":type==="error"?"Gagal":"Info");
+    item.innerHTML=`<div class="ml-notify-icon">${icon}</div><div class="ml-notify-body"><div class="ml-notify-title"></div><div class="ml-notify-message"></div></div><button type="button" class="ml-notify-close" aria-label="Tutup">×</button>`;
+    item.querySelector(".ml-notify-title").textContent=heading;
+    item.querySelector(".ml-notify-message").textContent=String(message||"");
+    const close=()=>item.remove();
+    item.querySelector(".ml-notify-close").onclick=close;
+    stack.appendChild(item);
+    setTimeout(close,4200);
+  }
+
   function ensureConfirm(){
     let root=document.getElementById("mlConfirm");
     if(root) return root;
     root=document.createElement("div");
     root.id="mlConfirm";
     root.hidden=true;
-    root.innerHTML='<div class="ml-backdrop" data-confirm-cancel></div><div class="ml-dialog" role="dialog" aria-modal="true" aria-labelledby="mlConfirmTitle"><div class="ml-icon">!</div><h3 id="mlConfirmTitle">Konfirmasi</h3><p id="mlConfirmMessage"></p><div class="ml-actions"><button type="button" class="ml-cancel">Batal</button><button type="button" class="ml-ok">Konfirmasi</button></div></div>';
+    root.innerHTML='<div class="ml-backdrop"></div><div class="ml-dialog" role="dialog" aria-modal="true" aria-labelledby="mlConfirmTitle"><div class="ml-icon">!</div><h3 id="mlConfirmTitle">Konfirmasi</h3><p id="mlConfirmMessage"></p><div class="ml-actions"><button type="button" class="ml-cancel">Batal</button><button type="button" class="ml-ok">Konfirmasi</button></div></div>';
     document.body.appendChild(root);
     return root;
   }
 
-  function confirmInApp({title="Konfirmasi",message="Lanjutkan tindakan ini?",confirmText="Konfirmasi",danger=true}={}){
+  function confirmInApp({title="Konfirmasi",message="Lanjutkan tindakan ini?",confirmText="Konfirmasi"}={}){
     const root=ensureConfirm();
     root.querySelector("#mlConfirmTitle").textContent=title;
     root.querySelector("#mlConfirmMessage").textContent=message;
     const ok=root.querySelector(".ml-ok");
     const cancel=root.querySelector(".ml-cancel");
     ok.textContent=confirmText;
-    ok.classList.toggle("danger",danger);
     root.hidden=false;
     document.body.classList.add("ml-modal-open");
     return new Promise(resolve=>{
@@ -97,15 +134,6 @@
     });
   }
 
-  function notify(message,type="info",title=""){
-    const toast=document.getElementById("toast");
-    if(!toast) return;
-    toast.className=`toast show ${type}`;
-    toast.textContent=title ? `${title}: ${message}` : String(message||"");
-    clearTimeout(notify._timer);
-    notify._timer=setTimeout(()=>{toast.className="toast"},3800);
-  }
-
   function installAccountDeleteInterceptor(){
     if(document.documentElement.dataset.musiclabConfirmInstalled==="1") return;
     document.documentElement.dataset.musiclabConfirmInstalled="1";
@@ -117,7 +145,7 @@
       event.stopImmediatePropagation();
       const row=button.closest(".account-item");
       const label=row?.querySelector(".account-label")?.textContent?.replace("✓","").trim() || "akun Roblox";
-      const confirmed=await confirmInApp({title:"Hapus akun Roblox?",message:`Akun ${label} akan dihapus dari daftar akun. Tindakan ini tidak dapat dibatalkan.`,confirmText:"Hapus",danger:true});
+      const confirmed=await confirmInApp({title:"Hapus akun Roblox?",message:`Akun ${label} akan dihapus dari daftar akun. Tindakan ini tidak dapat dibatalkan.`,confirmText:"Hapus"});
       if(!confirmed) return;
       const id=button.dataset.id;
       try{
@@ -134,10 +162,12 @@
 
   function install(){
     ensureStyles();
+    ensureNotifyStack();
     ensureConfirm();
     installAccountDeleteInterceptor();
     window.MusicLabNotify=notify;
     window.MusicLabConfirm=confirmInApp;
+    window.toast=(message,type="")=>notify(message,type);
   }
 
   install();
