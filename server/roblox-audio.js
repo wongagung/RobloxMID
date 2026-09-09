@@ -1,4 +1,5 @@
 import { Readable } from "stream";
+import { spawn } from "child_process";
 
 const OPEN_CLOUD_BASE = "https://apis.roblox.com";
 const ASSET_DELIVERY_BASE = "https://assetdelivery.roblox.com";
@@ -52,6 +53,16 @@ function forwardResponseHeaders(upstream, res, source, assetTypeId = null) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Expose-Headers", "Content-Length, Content-Range, Accept-Ranges, ETag, Last-Modified");
   res.setHeader("X-Roblox-Source", source);
+}
+
+function forwardTranscodedHeaders(res, source) {
+  res.setHeader("Content-Type", "audio/mpeg");
+  res.setHeader("Content-Disposition", "inline");
+  res.setHeader("Cache-Control", "public, max-age=300");
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Expose-Headers", "Content-Length, Accept-Ranges");
+  res.setHeader("X-Roblox-Source", source);
+  res.setHeader("X-Audio-Transform", "mp3");
 }
 
 async function responseDetails(response) {
@@ -133,12 +144,65 @@ async function fetchOpenCloudMedia(location, req) {
   });
 }
 
+async function transcodeResponseToMp3(upstream, res, source) {
+  if (!upstream?.body) throw new Error("Roblox media body kosong, tidak dapat ditranscode.");
+
+  const ffmpeg = spawn("ffmpeg", [
+    "-hide_banner",
+    "-loglevel", "error",
+    "-i", "pipe:0",
+    "-vn",
+    "-ac", "2",
+    "-ar", "44100",
+    "-c:a", "libmp3lame",
+    "-b:a", "192k",
+    "-f", "mp3",
+    "pipe:1",
+  ], {
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  forwardTranscodedHeaders(res, source);
+  res.status(200);
+
+  let stderr = "";
+  ffmpeg.stderr.setEncoding("utf8");
+  ffmpeg.stderr.on("data", (chunk) => { stderr += chunk; });
+
+  const abort = () => {
+    try { ffmpeg.kill("SIGKILL"); } catch {}
+  };
+  res.once("close", abort);
+
+  try {
+    Readable.fromWeb(upstream.body).pipe(ffmpeg.stdin);
+    for await (const chunk of ffmpeg.stdout) {
+      if (!res.write(chunk)) await new Promise(resolve => res.once("drain", resolve));
+    }
+
+    const exitCode = await new Promise((resolve, reject) => {
+      ffmpeg.once("error", reject);
+      ffmpeg.once("close", resolve);
+    });
+
+    if (exitCode !== 0) throw new Error(stderr.trim() || `FFmpeg keluar dengan code ${exitCode}.`);
+    res.end();
+  } catch (error) {
+    abort();
+    if (!res.headersSent) throw error;
+    res.destroy(error);
+  } finally {
+    res.removeListener("close", abort);
+  }
+}
+
 export async function proxyRobloxAudio(req, res, apiKey) {
   const assetId = validAssetId(req.params.assetId || req.query.id);
   if (!assetId) return res.status(400).json({ error: "Asset ID tidak valid." });
   if (!apiKey) return res.status(503).json({ error: "ROBLOX_API_KEY belum dikonfigurasi." });
 
   const attempts = [];
+  const transcode = String(req.query.format || "").toLowerCase() === "mp3";
 
   try {
     let resolved = null;
@@ -154,6 +218,7 @@ export async function proxyRobloxAudio(req, res, apiKey) {
       try {
         const upstream = await fetchOpenCloudMedia(resolved.location, req);
         if (upstream.ok) {
+          if (transcode) return transcodeResponseToMp3(upstream, res, `${resolved.source}:FFmpeg`);
           forwardResponseHeaders(upstream, res, resolved.source, resolved.assetTypeId);
           res.status(upstream.status);
           if (req.method === "HEAD" || !upstream.body) return res.end();
@@ -177,6 +242,7 @@ export async function proxyRobloxAudio(req, res, apiKey) {
       const legacy = await resolveLegacy(assetId, req);
       const upstream = legacy.response;
       attempts.push({ source: legacy.source, ok: true, status: upstream.status });
+      if (transcode) return transcodeResponseToMp3(upstream, res, `${legacy.source}:FFmpeg`);
       forwardResponseHeaders(upstream, res, legacy.source, legacy.assetTypeId);
       res.status(upstream.status);
       if (req.method === "HEAD" || !upstream.body) return res.end();
