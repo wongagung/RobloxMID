@@ -1,4 +1,4 @@
-/* RobloxMID canonical playlist + queue UI. */
+/* RobloxMID canonical playlist + queue controller. */
 (function () {
   "use strict";
 
@@ -17,10 +17,12 @@
   const preview = $("#urlPreviewCard");
   const status = $("#urlStatus");
   const statusText = $("#urlStatusText");
+  const queueList = $("#queueList");
 
   if (!input || !infoButton || !card || !list) return;
 
   const PAGE_SIZE = 50;
+  const MAX_BROWSER_BYTES = 20 * 1024 * 1024;
   let sourceUrl = "";
   let page = 1;
   let maxItems = 100;
@@ -29,6 +31,7 @@
   let currentItems = [];
   const selectedIds = new Set();
   const selectedItems = new Map();
+  const activeDownloads = new Set();
 
   function normalizeUrl(value) {
     let url = String(value ?? "").trim();
@@ -97,7 +100,7 @@
     const style = document.createElement("style");
     style.id = "robloxMidCanonicalPlaylistStyles";
     style.textContent = `
-      #playlistCard{margin-top:16px;padding:18px;border:1px solid var(--line);border-radius:18px;background:rgba(255,255,255,.025);overflow:hidden}
+      #playlistCard{margin-top:18px;padding:18px;border:1px solid var(--line);border-radius:16px;background:var(--panel,rgba(255,255,255,.025));overflow:hidden;box-shadow:0 8px 28px rgba(0,0,0,.08)}
       #playlistCard .playlist-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:14px;border-bottom:1px solid var(--line)}
       #playlistCard .playlist-title{font-size:15px;line-height:1.38;font-weight:800;color:var(--text);white-space:normal;overflow-wrap:anywhere;word-break:break-word}
       #playlistCard .playlist-meta{margin-top:5px;font-size:11px;line-height:1.4;color:var(--muted)}
@@ -120,29 +123,33 @@
       #playlistPagination button{cursor:pointer}
       #playlistPagination button:disabled{opacity:.45;cursor:not-allowed}
 
-      #queuePanel{order:-1;margin-top:18px}
+      #queuePanel{margin-top:18px;overflow:hidden}
       #queuePanel .panel-head{margin-bottom:14px}
       #queuePanel .panel-head>div{min-width:0}
-      #queuePanel .queue-list{display:flex;flex-direction:column;gap:8px;max-height:460px;overflow:auto;padding-right:2px}
-      #queuePanel .queue-item{display:grid;grid-template-columns:56px minmax(0,1fr) auto;gap:12px;align-items:center;position:relative;min-height:64px;padding:10px 12px;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.018);transition:background .15s,border-color .15s,box-shadow .15s}
+      #queuePanel .queue-list{display:flex;flex-direction:column;gap:8px;max-height:460px;overflow:auto;padding:0 2px 2px 0}
+      #queuePanel .queue-item{display:grid;grid-template-columns:56px minmax(0,1fr) auto;gap:12px;align-items:center;position:relative;min-height:64px;padding:10px 12px;border:1px solid var(--line);border-radius:13px;background:rgba(255,255,255,.018);transition:background .15s,border-color .15s,box-shadow .15s,opacity .15s}
       #queuePanel .queue-item:hover{background:rgba(255,255,255,.03);border-color:rgba(255,255,255,.13)}
-      #queuePanel .queue-item.queue-item-ready{border-color:#8b5cf625;background:#8b5cf606}
-      #queuePanel .queue-item.queue-item-error{border-color:#ef44441d;background:#ef444406}
-      #queuePanel .queue-item.queue-item-done{opacity:.6}
+      #queuePanel .queue-item.queue-item-ready{border-color:#22c55e33;background:#22c55e0a}
+      #queuePanel .queue-item.queue-item-error{border-color:#ef444433;background:#ef44440a}
+      #queuePanel .queue-item.queue-item-done{opacity:.62}
+      #queuePanel .queue-item.queue-item-uploading{border-color:#f59e0b33;background:#f59e0b0a}
       #queuePanel .queue-item.is-editing{border-color:#8b5cf677;background:linear-gradient(90deg,#8b5cf612,#22d3ee08);box-shadow:0 0 0 1px #8b5cf61c,0 10px 28px #00000020}
-      #queuePanel .queue-item.is-editing::before{content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:0 3px 3px 0;background:linear-gradient(180deg,#8b5cf6,#22d3ee)}
-      #queuePanel .queue-thumb{display:block;width:56px;height:42px;border-radius:8px;object-fit:cover;background:#080b13;border:1px solid #ffffff0d}
+      #queuePanel .queue-item.is-download-active{border-color:#22d3ee55;background:#22d3ee08}
+      #queuePanel .queue-thumb{display:block;width:56px;height:42px;border-radius:8px;object-fit:cover;background:#080b13;border:1px solid var(--line)}
       #queuePanel .queue-meta{min-width:0;align-self:center}
       #queuePanel .queue-title{display:block;font-size:13px;font-weight:800;line-height:1.38;color:var(--text);white-space:normal;overflow-wrap:anywhere;word-break:break-word}
       #queuePanel .queue-status-text{margin-top:4px;font-size:10.5px;line-height:1.35;color:var(--muted)}
       #queuePanel .queue-item-ready .queue-status-text{color:#6ee7b7}
       #queuePanel .queue-item-error .queue-status-text{color:#fca5a5}
-      #queuePanel .queue-item.is-editing .queue-status-text{color:#67e8f9;font-weight:800}
+      #queuePanel .queue-item-uploading .queue-status-text{color:#fcd34d}
       #queuePanel .queue-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;flex-wrap:wrap}
       #queuePanel .queue-actions button{width:auto!important;min-width:0;margin:0!important;padding:8px 11px!important;border-radius:9px;font-size:10.5px!important;line-height:1;white-space:nowrap}
       #queuePanel .queue-edit-btn{border-color:#ffffff13}
       #queuePanel .queue-edit-state{display:inline-flex;align-items:center;gap:5px;margin-top:6px;padding:4px 8px;border:1px solid #22d3ee33;border-radius:999px;background:#22d3ee0b;color:#67e8f9;font-size:9px;font-weight:850;letter-spacing:.05em;text-transform:uppercase;width:max-content}
       #queuePanel .queue-edit-state::before{content:"✓";display:grid;place-items:center;width:12px;height:12px;border-radius:50%;background:#22d3ee18}
+      #queuePanel .queue-error-detail{margin-top:6px;padding:7px 8px;border-radius:9px;background:#ef44440b;border:1px solid #ef44441f;color:#fca5a5;font-size:10px;line-height:1.4;white-space:normal;overflow-wrap:anywhere}
+      #queuePanel .queue-download-progress{height:3px;margin-top:7px;border-radius:999px;overflow:hidden;background:#ffffff0d}
+      #queuePanel .queue-download-progress>i{display:block;height:100%;width:0;background:linear-gradient(90deg,#8b5cf6,#22d3ee);transition:width .12s ease}
       #robloxMidActiveEditing{display:none;align-items:center;gap:9px;margin:0 0 12px;padding:9px 12px;border:1px solid #8b5cf633;border-radius:10px;background:linear-gradient(90deg,#8b5cf60d,#22d3ee08);color:#c4b5fd;font-size:11px;line-height:1.35}
       #robloxMidActiveEditing.visible{display:flex}
       #robloxMidActiveEditing .active-edit-icon{width:22px;height:22px;flex:0 0 22px;display:grid;place-items:center;border-radius:7px;background:linear-gradient(135deg,#7c3aed,#0891b2);color:#fff;font-size:11px}
@@ -213,8 +220,8 @@
     if (next) next.disabled = loading || !hasNext;
     if (limit) limit.value = String(maxItems);
     if (downloadButton) {
-      downloadButton.disabled = loading || selectedItems.size === 0;
-      downloadButton.textContent = selectedItems.size ? `⬇ Download ${selectedItems.size} Track` : "⬇ Download Terpilih";
+      downloadButton.disabled = loading || selectedItems.size === 0 || activeDownloads.size > 0;
+      downloadButton.textContent = activeDownloads.size ? `⏳ Downloading ${activeDownloads.size}...` : selectedItems.size ? `⬇ Download ${selectedItems.size} Track` : "⬇ Download Terpilih";
     }
     if (selectAllButton) {
       const all = currentItems.length > 0 && currentItems.every(item => selectedIds.has(String(item.id)));
@@ -287,13 +294,13 @@
   function markQueueItemForEditing(item) {
     if (!item) return;
     ensureActiveEditingBanner();
-    document.querySelectorAll("#queuePanel .queue-item.is-editing").forEach(active => {
+    queueList?.querySelectorAll(".queue-item.is-editing").forEach(active => {
       active.classList.remove("is-editing");
       active.querySelector(".queue-edit-state")?.remove();
     });
     item.classList.add("is-editing");
     const meta = item.querySelector(".queue-meta");
-    if (meta) {
+    if (meta && !meta.querySelector(".queue-edit-state")) {
       const state = document.createElement("div");
       state.className = "queue-edit-state";
       state.textContent = "Loaded for editing";
@@ -308,20 +315,170 @@
     }
   }
 
-  function bindQueueEditSelection() {
-    const queueList = $("#queueList");
-    if (!queueList || queueList.dataset.editSelectorBound === "true") return;
-    queueList.dataset.editSelectorBound = "true";
-    queueList.addEventListener("click", event => {
-      const button = event.target.closest?.(".queue-edit-btn");
-      if (!button) return;
-      markQueueItemForEditing(button.closest(".queue-item"));
+  function queueSnapshot(index) {
+    try {
+      if (typeof _downloadQueue === "undefined" || !Array.isArray(_downloadQueue)) return null;
+      return _downloadQueue[index] || null;
+    } catch { return null; }
+  }
+
+  function rerenderQueue() {
+    if (typeof renderQueue === "function") renderQueue();
+    decorateQueueErrors();
+  }
+
+  function decorateQueueErrors() {
+    if (!queueList || typeof _downloadQueue === "undefined" || !Array.isArray(_downloadQueue)) return;
+    queueList.querySelectorAll(".queue-item[data-qi]").forEach(row => {
+      const index = Number(row.dataset.qi);
+      const item = _downloadQueue[index];
+      if (!item) return;
+      row.classList.toggle("is-download-active", activeDownloads.has(String(item.id)));
+      row.querySelector(".queue-error-detail")?.remove();
+      row.querySelector(".queue-download-progress")?.remove();
+      if (item.errorMessage && item.status === "error") {
+        const meta = row.querySelector(".queue-meta");
+        if (meta) {
+          const detail = document.createElement("div");
+          detail.className = "queue-error-detail";
+          detail.textContent = String(item.errorMessage).slice(0, 260);
+          meta.appendChild(detail);
+        }
+      }
+      if (activeDownloads.has(String(item.id))) {
+        const meta = row.querySelector(".queue-meta");
+        if (meta) {
+          const wrap = document.createElement("div");
+          wrap.className = "queue-download-progress";
+          const bar = document.createElement("i");
+          bar.style.width = `${Math.max(0, Math.min(100, Number(item.downloadPercent || 0)))}%`;
+          wrap.appendChild(bar);
+          meta.appendChild(wrap);
+        }
+      }
     });
   }
 
+  async function downloadQueueBinary(index) {
+    const item = queueSnapshot(index);
+    if (!item || !item.url) return false;
+    const id = String(item.id || index);
+    if (activeDownloads.has(id)) return false;
+
+    activeDownloads.add(id);
+    item.status = "waiting";
+    item.errorMessage = "";
+    item.downloadPercent = 0;
+    rerenderQueue();
+
+    try {
+      const response = await fetch("/api/fetch-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "audio/mpeg,audio/*" },
+        body: JSON.stringify({ url: canonicalItemUrl(item) || normalizeUrl(item.url) })
+      });
+
+      if (!response.ok) {
+        let message = `Server HTTP ${response.status}`;
+        try {
+          const data = await response.json();
+          message = data?.error || data?.message || message;
+          if (data?.code) message = `${message} [${data.code}]`;
+        } catch {
+          try {
+            const text = await response.text();
+            if (text.trim()) message = text.trim().slice(0, 260);
+          } catch {}
+        }
+        throw new Error(message);
+      }
+
+      const declared = Number(response.headers.get("content-length") || 0);
+      if (declared > MAX_BROWSER_BYTES) throw new Error("File terlalu besar. Maksimal 20 MB.");
+
+      const titleHeader = response.headers.get("x-track-title");
+      let title = item.title || "Track";
+      if (titleHeader) {
+        try { title = decodeURIComponent(titleHeader); } catch { title = titleHeader; }
+      }
+
+      const contentType = response.headers.get("content-type") || "audio/mpeg";
+      const reader = response.body?.getReader();
+      const chunks = [];
+      let received = 0;
+
+      if (reader) {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (!value) continue;
+          received += value.byteLength;
+          if (received > MAX_BROWSER_BYTES) {
+            try { await reader.cancel(); } catch {}
+            throw new Error("File terlalu besar. Maksimal 20 MB.");
+          }
+          chunks.push(value);
+          item.downloadPercent = declared > 0 ? Math.min(100, Math.round(received / declared * 100)) : 0;
+          rerenderQueue();
+        }
+      } else {
+        const value = new Uint8Array(await response.arrayBuffer());
+        received = value.byteLength;
+        if (received > MAX_BROWSER_BYTES) throw new Error("File terlalu besar. Maksimal 20 MB.");
+        chunks.push(value);
+        item.downloadPercent = 100;
+      }
+
+      if (!received) throw new Error("Server mengembalikan file kosong.");
+
+      const blob = new Blob(chunks, { type: contentType.includes("audio/") ? contentType : "audio/mpeg" });
+      const safeTitle = String(title || item.title || "Track").replace(/[\\/:*?"<>|]+/g, " ").trim().slice(0, 100) || "Track";
+      item.file = new File([blob], `${safeTitle}.mp3`, { type: blob.type });
+      item.title = safeTitle;
+      item.status = "ready";
+      item.errorMessage = "";
+      item.downloadPercent = 100;
+      return true;
+    } catch (error) {
+      item.status = "error";
+      item.errorMessage = error?.message || "Gagal mendownload audio.";
+      item.file = null;
+      return false;
+    } finally {
+      activeDownloads.delete(id);
+      rerenderQueue();
+      updateControls();
+    }
+  }
+
+  function bindQueueController() {
+    if (!queueList || queueList.dataset.canonicalQueueController === "true") return;
+    queueList.dataset.canonicalQueueController = "true";
+
+    queueList.addEventListener("click", event => {
+      const button = event.target.closest?.("button[data-qi]");
+      if (!button) return;
+      const index = Number(button.dataset.qi);
+      const item = queueSnapshot(index);
+      if (!item) return;
+
+      if (button.classList.contains("queue-retry-btn")) {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation();
+        void downloadQueueBinary(index);
+        return;
+      }
+
+      if (button.classList.contains("queue-edit-btn")) {
+        markQueueItemForEditing(button.closest(".queue-item"));
+      }
+    }, true);
+  }
+
   async function downloadSelected() {
-    if (loading || selectedItems.size === 0) return;
-    if (typeof _downloadQueue === "undefined" || typeof downloadQueueItem !== "function") {
+    if (loading || selectedItems.size === 0 || activeDownloads.size > 0) return;
+    if (typeof _downloadQueue === "undefined" || !Array.isArray(_downloadQueue)) {
       showStatus("Queue downloader belum siap. Refresh halaman lalu coba lagi.", true);
       return;
     }
@@ -339,20 +496,25 @@
         thumbnail: youtubeThumbnail(item),
         url: canonicalItemUrl(item),
         file: null,
-        status: "waiting"
+        status: "waiting",
+        errorMessage: "",
+        downloadPercent: 0
       });
     });
-    if (typeof renderQueue === "function") renderQueue();
+    rerenderQueue();
 
     for (let i = 0; i < chosen.length; i++) {
       const qIndex = start + i;
-      if (progressText) progressText.textContent = `Mendownload ${i + 1}/${chosen.length}: ${chosen[i].title}`;
-      if (progressBar) progressBar.style.width = `${(i / chosen.length) * 100}%`;
-      await downloadQueueItem(qIndex);
+      const selected = chosen[i];
+      if (progressText) progressText.textContent = `Mendownload ${i + 1}/${chosen.length}: ${selected.title}`;
+      if (progressBar) progressBar.style.width = `${Math.round((i / chosen.length) * 100)}%`;
+      await downloadQueueBinary(qIndex);
     }
 
     if (progressBar) progressBar.style.width = "100%";
-    if (progressText) progressText.textContent = `✓ ${chosen.length} track diproses ke antrian`;
+    const readyCount = chosen.filter((_, i) => _downloadQueue[start + i]?.status === "ready").length;
+    const failedCount = chosen.length - readyCount;
+    if (progressText) progressText.textContent = failedCount ? `⚠ ${readyCount} siap, ${failedCount} gagal. Cek detail error di antrian.` : `✓ ${readyCount} track siap diedit di antrian.`;
     downloadButton.disabled = false;
     selectAllButton.disabled = false;
     updateControls();
@@ -434,7 +596,7 @@
     injectStyles();
     ensurePagination();
     ensureActiveEditingBanner();
-    bindQueueEditSelection();
+    bindQueueController();
     showStatus("⏳ Memuat playlist...", false);
     preview?.classList.add("hidden");
     await loadPage(1);
@@ -460,11 +622,6 @@
 
   injectStyles();
   ensureActiveEditingBanner();
-  bindQueueEditSelection();
-
-  const observer = new MutationObserver(() => {
-    ensureActiveEditingBanner();
-    bindQueueEditSelection();
-  });
-  observer.observe(document.documentElement, { childList: true, subtree: true });
+  bindQueueController();
+  decorateQueueErrors();
 })();
