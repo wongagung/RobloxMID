@@ -3,14 +3,14 @@ import { spawn } from "child_process";
 
 const OPEN_CLOUD_BASE = "https://apis.roblox.com";
 const ASSET_DELIVERY_BASE = "https://assetdelivery.roblox.com";
-const DEFAULT_UA = "RobloxMID-AudioProxy/2.0";
+const DEFAULT_UA = "RobloxMID-AudioProxy/2.1";
 
 function validAssetId(value) {
   const id = String(value || "").trim();
   return /^\d+$/.test(id) ? id : null;
 }
 
-function mediaHeaders(req, range = null) {
+function mediaHeaders(req, range = null, includeRange = true) {
   const headers = {
     "User-Agent": DEFAULT_UA,
     Accept: "*/*",
@@ -18,7 +18,7 @@ function mediaHeaders(req, range = null) {
   };
 
   const requestedRange = range || req?.headers?.range;
-  if (requestedRange) headers.Range = requestedRange;
+  if (includeRange && requestedRange) headers.Range = requestedRange;
   if (req?.headers?.["if-range"]) headers["If-Range"] = req.headers["if-range"];
   if (req?.headers?.["if-none-match"]) headers["If-None-Match"] = req.headers["if-none-match"];
   if (req?.headers?.["if-modified-since"]) headers["If-Modified-Since"] = req.headers["if-modified-since"];
@@ -112,11 +112,11 @@ async function resolveOpenCloud(assetId, apiKey) {
   };
 }
 
-async function resolveLegacy(assetId, req) {
+async function resolveLegacy(assetId, req, includeRange = true) {
   const url = `${ASSET_DELIVERY_BASE}/v2/assetId/${encodeURIComponent(assetId)}`;
   const response = await fetch(url, {
     method: req?.method === "HEAD" ? "HEAD" : "GET",
-    headers: mediaHeaders(req),
+    headers: mediaHeaders(req, null, includeRange),
     redirect: "follow",
   });
 
@@ -136,10 +136,10 @@ async function resolveLegacy(assetId, req) {
   };
 }
 
-async function fetchOpenCloudMedia(location, req) {
+async function fetchOpenCloudMedia(location, req, includeRange = true) {
   return fetch(location, {
     method: req.method === "HEAD" ? "HEAD" : "GET",
-    headers: mediaHeaders(req),
+    headers: mediaHeaders(req, null, includeRange),
     redirect: "follow",
   });
 }
@@ -172,7 +172,10 @@ async function transcodeResponseToMp3(upstream, res, source) {
   const abort = () => {
     try { ffmpeg.kill("SIGKILL"); } catch {}
   };
-  res.once("close", abort);
+  let completed = false;
+  res.once("close", () => {
+    if (!completed) abort();
+  });
 
   try {
     Readable.fromWeb(upstream.body).pipe(ffmpeg.stdin);
@@ -186,13 +189,12 @@ async function transcodeResponseToMp3(upstream, res, source) {
     });
 
     if (exitCode !== 0) throw new Error(stderr.trim() || `FFmpeg keluar dengan code ${exitCode}.`);
+    completed = true;
     res.end();
   } catch (error) {
     abort();
     if (!res.headersSent) throw error;
     res.destroy(error);
-  } finally {
-    res.removeListener("close", abort);
   }
 }
 
@@ -216,7 +218,9 @@ export async function proxyRobloxAudio(req, res, apiKey) {
 
     if (resolved) {
       try {
-        const upstream = await fetchOpenCloudMedia(resolved.location, req);
+        // MP3 fallback must download the complete source. A browser Range request
+        // would otherwise give FFmpeg only a partial OGG stream.
+        const upstream = await fetchOpenCloudMedia(resolved.location, req, !transcode);
         if (upstream.ok) {
           if (transcode) return transcodeResponseToMp3(upstream, res, `${resolved.source}:FFmpeg`);
           forwardResponseHeaders(upstream, res, resolved.source, resolved.assetTypeId);
@@ -239,7 +243,8 @@ export async function proxyRobloxAudio(req, res, apiKey) {
     }
 
     try {
-      const legacy = await resolveLegacy(assetId, req);
+      // Same rule for the legacy source: transcoding needs the complete asset.
+      const legacy = await resolveLegacy(assetId, req, !transcode);
       const upstream = legacy.response;
       attempts.push({ source: legacy.source, ok: true, status: upstream.status });
       if (transcode) return transcodeResponseToMp3(upstream, res, `${legacy.source}:FFmpeg`);
@@ -282,7 +287,7 @@ export async function checkRobloxAudio(assetId, apiKey) {
   try {
     try {
       const resolved = await resolveOpenCloud(id, apiKey);
-      const media = await fetchOpenCloudMedia(resolved.location, { method: "GET", headers: { range: "bytes=0-1" } });
+      const media = await fetchOpenCloudMedia(resolved.location, { method: "GET", headers: { range: "bytes=0-1" } }, true);
       const mediaType = sniffAudioType(resolved.assetTypeId, media.headers.get("content-type"));
       const result = {
         source: resolved.source,
@@ -308,7 +313,7 @@ export async function checkRobloxAudio(assetId, apiKey) {
     }
 
     try {
-      const legacy = await resolveLegacy(id, { method: "GET", headers: { range: "bytes=0-1" } });
+      const legacy = await resolveLegacy(id, { method: "GET", headers: { range: "bytes=0-1" } }, true);
       const media = legacy.response;
       const mediaType = sniffAudioType(legacy.assetTypeId, media.headers.get("content-type"));
       const result = {
