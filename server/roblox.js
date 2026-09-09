@@ -1,6 +1,7 @@
 import fs from "fs";
 import os from "os";
 import path from "path";
+import crypto from "crypto";
 import express from "express";
 import multer from "multer";
 import { execFile } from "child_process";
@@ -9,6 +10,14 @@ import { promisify } from "util";
 const execFileAsync = promisify(execFile);
 const API_BASE = "https://apis.roblox.com";
 const ROBLOX_MAX_BYTES = 20 * 1024 * 1024;
+const ROBLOX_NAME_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+function generateRobloxAssetName() {
+  const bytes = crypto.randomBytes(10);
+  let suffix = "";
+  for (const byte of bytes) suffix += ROBLOX_NAME_ALPHABET[byte % ROBLOX_NAME_ALPHABET.length];
+  return `RBX-AUDIO-${suffix}`;
+}
 
 function mimeFor(ext) {
   return ({
@@ -166,6 +175,7 @@ export async function getAssetModerationStatus(assetId, apiKey) {
 export async function uploadAudioToRoblox({ filePath, displayName, description = "", userId, apiKey }) {
   let uploadStarted = false;
   let prepared = null;
+  const robloxName = generateRobloxAssetName();
   try {
     if (!filePath) throw new Error("filePath wajib diisi.");
     if (!apiKey) throw new Error("Roblox API key tidak ditemukan.");
@@ -186,16 +196,16 @@ export async function uploadAudioToRoblox({ filePath, displayName, description =
     if (uploadStat.size > ROBLOX_MAX_BYTES) throw new Error("Roblox audio upload melebihi batas 20 MB setelah kompresi.");
 
     const fileBuffer = fs.readFileSync(uploadPath);
-    console.log(`[Roblox] Preparing upload: ${path.basename(uploadPath)} (${fileBuffer.length} bytes)`);
+    console.log(`[Roblox] Preparing upload: ${path.basename(uploadPath)} (${fileBuffer.length} bytes) as ${robloxName}`);
 
     const request = {
       assetType: "Audio",
-      displayName: String(displayName),
+      displayName: robloxName,
       description: String(description || ""),
       creationContext: { creator: { userId: String(userId) } }
     };
 
-    const multipart = createMultipartBody({ request, fileBuffer, fileName: `${displayName}${ext}`, fileContentType: mimeType });
+    const multipart = createMultipartBody({ request, fileBuffer, fileName: `${robloxName}${ext}`, fileContentType: mimeType });
     uploadStarted = true;
     const created = await robloxRequest(`${API_BASE}/assets/v1/assets`, {
       method: "POST",
@@ -207,7 +217,7 @@ export async function uploadAudioToRoblox({ filePath, displayName, description =
     const directAssetId = created?.assetId || created?.asset?.assetId || created?.asset?.id || created?.id || null;
 
     if (!operationId) {
-      if (directAssetId) return { status: "completed", operationId: null, assetId: String(directAssetId), moderation: normalizeModerationState(created?.moderationResult?.moderationState) };
+      if (directAssetId) return { status: "completed", operationId: null, assetId: String(directAssetId), robloxName, moderation: normalizeModerationState(created?.moderationResult?.moderationState) };
       throw new Error(`Roblox tidak mengembalikan operationId maupun assetId. Response: ${JSON.stringify(created)}`);
     }
 
@@ -225,10 +235,10 @@ export async function uploadAudioToRoblox({ filePath, displayName, description =
       }
       const assetId = op?.response?.assetId || op?.response?.asset?.assetId || op?.response?.asset?.id || op?.response?.id || null;
       if (!assetId) throw new Error(`Roblox operation selesai tetapi assetId tidak ditemukan. Response: ${JSON.stringify(op)}`);
-      return { status: "completed", operationId, assetId: String(assetId), moderation: normalizeModerationState(op?.response?.moderationResult?.moderationState) };
+      return { status: "completed", operationId, assetId: String(assetId), robloxName, moderation: normalizeModerationState(op?.response?.moderationResult?.moderationState) };
     }
 
-    return { status: "processing", operationId };
+    return { status: "processing", operationId, robloxName };
   } catch (error) {
     console.error(`[Roblox] Upload failed: ${error?.message || error}`);
     if (uploadStarted) safeDeleteFile(prepared?.filePath || filePath);
