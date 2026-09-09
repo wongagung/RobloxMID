@@ -2,24 +2,22 @@ name: One-time Roblox name separation
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: write
 
 jobs:
   migrate:
-    if: ${{ !contains(github.event.head_commit.message, '[roblox-name-separation]') }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Apply clean name separation
-        shell: python
-        run: |
+        run: python3 - <<'PY'
           from pathlib import Path
-          import re
 
           roblox = Path('server/roblox.js')
           index = Path('server/index.js')
@@ -32,89 +30,94 @@ jobs:
               raise SystemExit('Roblox name separation already present; nothing to do.')
 
           helper = '''
-const ROBLOX_NAME_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+          const ROBLOX_NAME_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-function generateRobloxAssetName() {
-  const bytes = crypto.randomBytes(10);
-  let suffix = "";
-  for (const byte of bytes) suffix += ROBLOX_NAME_ALPHABET[byte % ROBLOX_NAME_ALPHABET.length];
-  return `RBX-AUDIO-${suffix}`; // ROBLOXMID_NEUTRAL_NAME_V1
-}
-'''
+          function generateRobloxAssetName() {
+            const bytes = crypto.randomBytes(10);
+            let suffix = "";
+            for (const byte of bytes) suffix += ROBLOX_NAME_ALPHABET[byte % ROBLOX_NAME_ALPHABET.length];
+            return `RBX-AUDIO-${suffix}`; // ROBLOXMID_NEUTRAL_NAME_V1
+          }
+          '''
 
-          r = r.replace(
-              'const ROBLOX_MAX_BYTES = 20 * 1024 * 1024;\n',
-              'const ROBLOX_MAX_BYTES = 20 * 1024 * 1024;\n' + helper
-          )
+          needle = 'const ROBLOX_MAX_BYTES = 20 * 1024 * 1024;\n'
+          if needle not in r:
+              raise SystemExit('Roblox size constant not found.')
+          r = r.replace(needle, needle + helper, 1)
 
           old_request = '''    const request = {
-      assetType: "Audio",
-      displayName: String(displayName),
-      description: String(description || ""),
-      creationContext: { creator: { userId: String(userId) } }
-    };'''
+              assetType: "Audio",
+              displayName: String(displayName),
+              description: String(description || ""),
+              creationContext: { creator: { userId: String(userId) } }
+            };'''
           new_request = '''    const robloxName = generateRobloxAssetName();
-    const request = {
-      assetType: "Audio",
-      displayName: robloxName,
-      description: String(description || ""),
-      creationContext: { creator: { userId: String(userId) } }
-    };'''
+            const request = {
+              assetType: "Audio",
+              displayName: robloxName,
+              description: String(description || ""),
+              creationContext: { creator: { userId: String(userId) } }
+            };'''
           if old_request not in r:
-              raise SystemExit('Expected Roblox audio request block not found.')
+              raise SystemExit('Roblox audio request block not found.')
           r = r.replace(old_request, new_request, 1)
 
-          r = r.replace(
+          replacements = [
+            (
               'return { status: "completed", operationId: null, assetId: String(directAssetId), moderation: normalizeModerationState(created?.moderationResult?.moderationState) };',
-              'return { status: "completed", operationId: null, assetId: String(directAssetId), robloxName, moderation: normalizeModerationState(created?.moderationResult?.moderationState) };',
-              1
-          )
-          r = r.replace(
+              'return { status: "completed", operationId: null, assetId: String(directAssetId), robloxName, moderation: normalizeModerationState(created?.moderationResult?.moderationState) };'
+            ),
+            (
               'return { status: "completed", operationId, assetId: String(assetId), moderation: normalizeModerationState(op?.response?.moderationResult?.moderationState) };',
-              'return { status: "completed", operationId, assetId: String(assetId), robloxName, moderation: normalizeModerationState(op?.response?.moderationResult?.moderationState) };',
-              1
-          )
-          r = r.replace(
+              'return { status: "completed", operationId, assetId: String(assetId), robloxName, moderation: normalizeModerationState(op?.response?.moderationResult?.moderationState) };'
+            ),
+            (
               'return { status: "processing", operationId };',
-              'return { status: "processing", operationId, robloxName };',
-              1
-          )
+              'return { status: "processing", operationId, robloxName };'
+            )
+          ]
+          for old, new in replacements:
+              if old not in r:
+                  raise SystemExit(f'Roblox return block not found: {old[:60]}')
+              r = r.replace(old, new, 1)
           roblox.write_text(r, encoding='utf-8')
 
           old_record = 'roblox: { status: "pending" },'
           new_record = 'roblox: { status: "pending", name: null },'
           if old_record not in i:
-              raise SystemExit('Expected Roblox history record block not found.')
+              raise SystemExit('History Roblox record not found.')
           i = i.replace(old_record, new_record, 1)
 
           old_assignment = '''        item.roblox = {
-          status: result.status,
-          assetId: result.assetId || null,
-          operationId: result.operationId || null,
-          moderation: result.moderation || (result.assetId ? "reviewing" : null),
-          error: result.error || null
-        };'''
+              status: result.status,
+              assetId: result.assetId || null,
+              operationId: result.operationId || null,
+              moderation: result.moderation || (result.assetId ? "reviewing" : null),
+              error: result.error || null
+            };'''
           new_assignment = '''        item.roblox = {
-          status: result.status,
-          name: result.robloxName || item.roblox?.name || null,
-          assetId: result.assetId || null,
-          operationId: result.operationId || null,
-          moderation: result.moderation || (result.assetId ? "reviewing" : null),
-          error: result.error || null
-        };'''
+              status: result.status,
+              name: result.robloxName || item.roblox?.name || null,
+              assetId: result.assetId || null,
+              operationId: result.operationId || null,
+              moderation: result.moderation || (result.assetId ? "reviewing" : null),
+              error: result.error || null
+            };'''
           if old_assignment not in i:
-              raise SystemExit('Expected Roblox history assignment block not found.')
+              raise SystemExit('History Roblox assignment not found.')
           i = i.replace(old_assignment, new_assignment, 1)
 
           old_desc = '          description: `Uploaded with Roblox Music Uploader — ${record.originalName}`,\n'
           new_desc = '          description: "Uploaded with Roblox Music Uploader",\n'
           if old_desc not in i:
-              raise SystemExit('Expected Roblox description line not found.')
+              raise SystemExit('Roblox description line not found.')
           i = i.replace(old_desc, new_desc, 1)
 
           index.write_text(i, encoding='utf-8')
+          print('Name separation migration applied.')
+          PY
 
-      - name: Validate JavaScript and migration invariants
+      - name: Validate
         run: |
           node --check server/index.js
           node --check server/roblox.js
@@ -122,8 +125,9 @@ function generateRobloxAssetName() {
           grep -q 'name: result.robloxName' server/index.js
           grep -q 'description: "Uploaded with Roblox Music Uploader"' server/index.js
           grep -q 'roblox: { status: "pending", name: null }' server/index.js
+          git diff --check
 
-      - name: Commit migration and remove one-time workflow
+      - name: Commit migration and remove workflow
         run: |
           rm -f .github/workflows/one-time-roblox-name-separation.yml
           git config user.name "github-actions[bot]"
