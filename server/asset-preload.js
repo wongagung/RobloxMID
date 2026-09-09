@@ -8,6 +8,7 @@ import { execFile } from "child_process";
 import { promisify } from "util";
 import { uploadGenericAsset, getGenericAsset } from "./asset-hub.js";
 import { mountUrlSourceRoutes } from "./url-source.js";
+import { proxyRobloxAudio, checkRobloxAudio } from "./roblox-audio.js";
 
 const execFileAsync = promisify(execFile);
 const API_BASE = "https://apis.roblox.com";
@@ -26,6 +27,25 @@ export function createAssetHubRouter(){
   r.get("/api/assets/health",(_req,res)=>res.json({ok:true,service:"asset-hub"}));
 
   mountUrlSourceRoutes(r);
+
+  // Open Cloud Asset Delivery proxy for browser/player clients.
+  // The API key stays server-side and is never exposed to the client.
+  r.get("/api/roblox/audio/:assetId", async (req,res)=>{
+    try {
+      const { apiKey } = activeAccount();
+      return proxyRobloxAudio(req,res,apiKey);
+    } catch (error) {
+      return res.status(503).json({ error:error?.message || "Roblox account/API key belum dikonfigurasi." });
+    }
+  });
+  r.get("/api/roblox/audio/check/:assetId", async (req,res)=>{
+    try {
+      const { apiKey } = activeAccount();
+      return res.json(await checkRobloxAudio(req.params.assetId,apiKey));
+    } catch (error) {
+      return res.status(503).json({ ok:false,error:error?.message || "Roblox account/API key belum dikonfigurasi." });
+    }
+  });
 
   r.post("/api/assets/upload",upload.single("file"),async(req,res)=>{let temp=null;try{const account=activeAccount();if(!req.file)return res.status(400).json({error:"File wajib diisi."});const assetType=normalizeAssetType(req.body.assetType);const creatorType=String(req.body.creatorType||"user").toLowerCase();const groupId=String(req.body.groupId||"").trim();const displayName=String(req.body.displayName||path.basename(req.file.originalname,path.extname(req.file.originalname))).trim();const description=String(req.body.description||"");if(displayName.length<3||displayName.length>50)return res.status(400).json({error:"Nama asset harus 3–50 karakter."});if(!["user","group"].includes(creatorType))return res.status(400).json({error:"Creator type tidak valid."});if(creatorType==="group"&&!/^\d+$/.test(groupId))return res.status(400).json({error:"Group ID tidak valid."});temp=path.join(os.tmpdir(),`robloxmid-${Date.now()}-${crypto.randomUUID()}${path.extname(req.file.originalname).toLowerCase()}`);fs.writeFileSync(temp,req.file.buffer);const result=await uploadGenericAsset({filePath:temp,originalName:req.file.originalname,assetType,displayName,description,creatorType,userId:account.userId,groupId,apiKey:account.apiKey,fileContentType:contentType(req.file.originalname)});const assetId=result.assetId||null;res.json({ok:true,...result,assetId,displayName,assetType,account:account.label,assetUri:assetId?`rbxassetid://${assetId}`:null,assetUrl:assetId?`https://create.roblox.com/store/asset/${assetId}`:null});}catch(error){console.error("[Asset Hub] upload error:",error);res.status(400).json({error:error?.message||"Upload asset gagal."});}finally{if(temp){try{fs.unlinkSync(temp)}catch{}}}});
   r.get("/api/assets/:assetId/thumbnail",async(req,res)=>{try{const id=String(req.params.assetId||"").trim();if(!/^\d+$/.test(id))return res.status(400).json({error:"Asset ID tidak valid."});const url=`https://thumbnails.roblox.com/v1/assets?assetIds=${encodeURIComponent(id)}&returnPolicy=PlaceHolder&size=512x512&format=Png&isCircular=false`;const response=await fetch(url);const text=await response.text();let data={};try{data=text?JSON.parse(text):{}}catch{}if(!response.ok)return res.status(response.status).json({error:data?.errors?.[0]?.message||`Thumbnail HTTP ${response.status}`});const item=data?.data?.[0]||null;res.json({ok:true,state:item?.state||"Unavailable",imageUrl:item?.imageUrl||null,version:item?.version||null});}catch(e){res.status(400).json({error:e?.message||"Gagal mengambil thumbnail."});}});
