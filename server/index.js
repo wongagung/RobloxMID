@@ -8,7 +8,7 @@ import { execFile, spawn } from "child_process";
 import { promisify } from "util";
 import { fileURLToPath } from "url";
 import { uploadAudioToRoblox, getAssetModerationStatus } from "./roblox.js";
-import { sendAudioToTelegram } from "./telegram.js";
+import { sendAudioToTelegram, downloadTelegramFile } from "./telegram.js";
 import { createAssetHubRouter } from "./asset-preload.js";
 
 const execFileAsync = promisify(execFile);
@@ -489,7 +489,7 @@ app.post("/api/upload", upload.single("audio"), async (req, res) => {
     createdAt: new Date().toISOString(),
     editorMeta,
     conversion: { status: supported.has(originalExt) ? "not_needed" : "pending" },
-    roblox: { status: "pending" },
+    roblox: { status: "pending", name: null },
     telegram: { status: "pending" }
   };
 
@@ -543,9 +543,10 @@ app.post("/api/roblox/moderation/:id/refresh", async (req, res) => {
   const history = readHistory();
   const item = history.find(x => x.id === req.params.id);
   if (!item?.roblox?.assetId) return res.status(404).json({ error: "Asset tidak ditemukan." });
-  if (!process.env.ROBLOX_API_KEY) return res.status(400).json({ error: "Roblox API key belum dikonfigurasi." });
+  const account = getActiveAccount();
+  if (!account?.apiKey) return res.status(400).json({ error: "Roblox API key belum dikonfigurasi." });
   try {
-    const state = await getAssetModerationStatus(item.roblox.assetId, process.env.ROBLOX_API_KEY);
+    const state = await getAssetModerationStatus(item.roblox.assetId, account.apiKey);
     item.roblox.moderation = state || item.roblox.moderation;
     writeHistory(history);
     res.json({ moderation: item.roblox.moderation });
@@ -575,6 +576,92 @@ app.get("/api/history/export/csv", (_, res) => {
   res.send("﻿" + rows); // BOM for Excel UTF-8 compatibility
 });
 // ─────────────────────────────────────────────────────────────────────────────
+
+
+// Retry Roblox upload from the Telegram archive; the original URL is never downloaded again.
+app.post("/api/history/:id/retry-roblox", async (req, res) => { // ROBLOXMID_RETRY_FROM_TELEGRAM_V1
+  const history = readHistory();
+  const item = history.find(x => x.id === req.params.id);
+  if (!item) return res.status(404).json({ error: "Item tidak ditemukan." });
+  if (item.roblox?.moderation !== "rejected") {
+    return res.status(409).json({ error: "Retry Roblox hanya tersedia untuk asset yang ditolak moderasi." });
+  }
+  const archiveId = item.telegram?.fileId;
+  if (!archiveId) return res.status(409).json({ error: "Arsip Telegram untuk retry tidak tersedia." });
+  const account = getActiveAccount();
+  if (!account?.apiKey || !account?.userId) return res.status(503).json({ error: "Roblox belum dikonfigurasi." });
+  if (!process.env.TELEGRAM_BOT_TOKEN) return res.status(503).json({ error: "Telegram archive belum dikonfigurasi." });
+
+  const retryPath = path.join(uploadsDir, `retry-${crypto.randomUUID()}.mp3`);
+  let optimizedPath = null;
+  const retryCount = Number(item.roblox?.retryCount || 0) + 1;
+  const retriedAt = new Date().toISOString();
+
+  try {
+    item.roblox = {
+      ...item.roblox,
+      status: "retrying",
+      moderation: "reviewing",
+      error: null,
+      name: null,
+      assetId: null,
+      operationId: null,
+      retryCount,
+      retriedAt
+    };
+    writeHistory(history);
+
+    await downloadTelegramFile(archiveId, retryPath);
+    optimizedPath = await optimizeForRoblox(retryPath, { autoVary: process.env.AUTO_VARY !== "false" });
+
+    const result = await uploadAudioToRoblox({
+      filePath: optimizedPath,
+      displayName: item.name || item.originalName || "Audio",
+      description: "Uploaded with Roblox Music Uploader",
+      userId: account.userId,
+      apiKey: account.apiKey
+    });
+
+    const latest = readHistory();
+    const latestItem = latest.find(x => x.id === item.id);
+    if (!latestItem) return res.status(404).json({ error: "History item menghilang saat retry." });
+
+    latestItem.roblox = {
+      status: result.status,
+      name: result.robloxName || null,
+      assetId: result.assetId || null,
+      operationId: result.operationId || null,
+      moderation: result.moderation || (result.assetId ? "reviewing" : null),
+      error: result.error || null,
+      retryCount,
+      retriedAt
+    };
+    writeHistory(latest);
+
+    if (result.assetId) {
+      pollModeration(item.id, result.assetId).catch(e => console.error("Retry moderation poll error:", e.message));
+    }
+    return res.status(202).json({ ok: true, id: item.id, status: result.status });
+  } catch (error) {
+    const latest = readHistory();
+    const latestItem = latest.find(x => x.id === item.id);
+    if (latestItem) {
+      latestItem.roblox = {
+        ...latestItem.roblox,
+        status: "failed",
+        moderation: "rejected",
+        error: error?.message || "Retry Roblox gagal.",
+        retryCount,
+        retriedAt
+      };
+      writeHistory(latest);
+    }
+    return res.status(502).json({ error: error?.message || "Retry Roblox gagal." });
+  } finally {
+    if (optimizedPath) safeUnlink(optimizedPath);
+    safeUnlink(retryPath);
+  }
+});
 
 app.get("/api/history/:id", (req, res) => {
   const item = readHistory().find(x => x.id === req.params.id);
@@ -661,7 +748,7 @@ async function processAudio(record, originalFilePath) {
         const result = await uploadAudioToRoblox({
           filePath: uploadPath,
           displayName: record.name,
-          description: `Uploaded with Roblox Music Uploader — ${record.originalName}`,
+          description: "Uploaded with Roblox Music Uploader",
           userId: _acc.userId,
           apiKey: _acc.apiKey
         });
@@ -673,6 +760,7 @@ async function processAudio(record, originalFilePath) {
         item = history.find(x => x.id === record.id);
         item.roblox = {
           status: result.status,
+          name: result.robloxName || null,
           assetId: result.assetId || null,
           operationId: result.operationId || null,
           moderation: result.moderation || (result.assetId ? "reviewing" : null),

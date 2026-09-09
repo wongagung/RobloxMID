@@ -38,7 +38,9 @@ assetName.addEventListener("input", () => {
 });
 
 function toast(msg, type="") {
+  if (window.MusicLabNotify) return window.MusicLabNotify(msg, type === "error" ? "error" : "success");
   const el = $("#toast");
+  if (!el) return;
   el.textContent = msg;
   el.className = `toast show ${type}`;
   setTimeout(() => el.className = "toast", 3200);
@@ -198,7 +200,7 @@ if (playlistSelectAll) {
 }
 
 // ── Download Queue ────────────────────────────────────────────────────────────
-let _downloadQueue = []; // { id, title, file, thumbnail, status: 'waiting'|'ready'|'uploading'|'done'|'error' }
+let _downloadQueue = []; // { id, title, file, thumbnail, status, historyId } // ROBLOXMID_URL_LIFECYCLE_V1
 
 const queuePanel = $("#queuePanel");
 const queueList = $("#queueList");
@@ -216,13 +218,7 @@ function renderQueue() {
   queuePanel.classList.remove("hidden");
   queueEmpty.style.display = "none";
   queueList.innerHTML = _downloadQueue.map((item, i) => {
-    const statusIcon = {
-      waiting:   "⏳",
-      ready:     "✏️",
-      uploading: "⬆️",
-      done:      "✓",
-      error:     "✗",
-    }[item.status] || "⏳";
+    const statusIcon = { waiting: "⏳", ready: "✏️", uploading: "⬆️", done: "✓", rejected: "✕", error: "✗" }[item.status] || "⏳";
     const statusClass = `queue-item-${item.status}`;
     return `
       <div class="queue-item ${statusClass}" data-qi="${i}">
@@ -233,7 +229,8 @@ function renderQueue() {
             item.status === "waiting"   ? "Mendownload..." :
             item.status === "ready"     ? "Siap diedit" :
             item.status === "uploading" ? "Mengupload ke Roblox..." :
-            item.status === "done"      ? "✓ Selesai diupload" :
+            item.status === "done"      ? "✓ Selesai Upload" :
+            item.status === "rejected"  ? "✕ Ditolak moderasi" :
             item.status === "error"     ? "✗ Gagal" : ""
           }</div>
         </div>
@@ -242,7 +239,8 @@ function renderQueue() {
             <button class="ghost-btn queue-edit-btn" data-qi="${i}">✏ Edit & Upload</button>
             <button class="primary-btn queue-upload-btn" data-qi="${i}" style="padding:7px 12px;font-size:12px;width:auto;margin:0">⬆ Upload Langsung</button>
           ` : ""}
-          ${item.status === "error" ? `<button class="ghost-btn queue-retry-btn" data-qi="${i}">↺ Retry</button>` : ""}
+          ${item.status === "error" ? `<button class="ghost-btn queue-retry-btn" data-qi="${i}">↺ Retry Download</button>` : ""}
+          ${item.status === "rejected" && item.historyId ? `<button class="ghost-btn queue-retry-roblox-btn" data-qi="${i}">↺ Retry Roblox</button>` : ""}
         </div>
       </div>`;
   }).join("");
@@ -274,12 +272,57 @@ function renderQueue() {
       await new Promise(r => setTimeout(r, 300));
       const uploadBtn = $("#uploadBtn");
       if (uploadBtn && !uploadBtn.disabled) {
+        window.MusicLabUploadLastId = null;
         uploadBtn.click();
-        item.status = "done";
-        setTimeout(renderQueue, 3000);
+        const startedAt = Date.now();
+        while (!window.MusicLabUploadLastId && Date.now() - startedAt < 15000) {
+          await new Promise(r => setTimeout(r, 150));
+        }
+        const historyId = window.MusicLabUploadLastId;
+        if (!historyId) { item.status = "error"; renderQueue(); return; }
+        item.historyId = historyId;
+        item.status = "uploading";
+        renderQueue();
+        for (let attempt = 0; attempt < 180; attempt++) {
+          try {
+            const h = await api(`/api/history/${encodeURIComponent(historyId)}`);
+            if (h.roblox?.status === "failed") { item.status = "error"; renderQueue(); return; }
+            if (h.roblox?.moderation === "rejected") { item.status = "rejected"; renderQueue(); return; }
+            if (h.roblox?.moderation === "approved") { item.status = "done"; renderQueue(); return; }
+            if (h.roblox?.status === "completed") { item.status = "done"; renderQueue(); return; }
+          } catch {}
+          await new Promise(r => setTimeout(r, 1000));
+        }
+        item.status = "uploading";
+        renderQueue();
       } else {
         item.status = "error";
         renderQueue();
+      }
+    };
+  });
+
+  queueList.querySelectorAll(".queue-retry-roblox-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const idx = parseInt(btn.dataset.qi);
+      const item = _downloadQueue[idx];
+      if (!item?.historyId) return;
+      item.status = "uploading";
+      renderQueue();
+      try {
+        await api(`/api/history/${encodeURIComponent(item.historyId)}/retry-roblox`, { method: "POST" });
+        for (let attempt = 0; attempt < 180; attempt++) {
+          const h = await api(`/api/history/${encodeURIComponent(item.historyId)}`);
+          if (h.roblox?.status === "failed") { item.status = "error"; renderQueue(); return; }
+          if (h.roblox?.moderation === "rejected") { item.status = "rejected"; renderQueue(); return; }
+          if (h.roblox?.moderation === "approved") { item.status = "done"; renderQueue(); return; }
+          if (h.roblox?.status === "completed" && h.roblox?.moderation !== "rejected") { item.status = "done"; renderQueue(); return; }
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } catch (e) {
+        item.status = "rejected";
+        renderQueue();
+        toast(e.message, "error");
       }
     };
   });
@@ -637,6 +680,7 @@ function _renderItems(items) {
       <div class="row-main">
         <strong>${escapeHtml(item.name)}</strong>
         <span>${escapeHtml(item.originalName)} · ${formatSize(item.size)} · ${formatDateTime(item.createdAt)}</span>
+        ${item.roblox?.name ? `<span class="roblox-name-label">🎮 Roblox: <b>${escapeHtml(item.roblox.name)}</b></span>` : ""}
         ${metaBadges.length ? `<div class="editor-meta-badges">${metaBadges.map(b => `<span class="editor-meta-badge">${b}</span>`).join("")}</div>` : ""}
       </div>
       <div class="chips">
@@ -651,6 +695,7 @@ function _renderItems(items) {
           <button onclick="copyText('${sound}')">Copy ID</button>
           ${moderation === "approved" ? `<a href="https://create.roblox.com/store/asset/${rid}" target="_blank" rel="noopener" class="asset-link-btn">🔗 Creator</a>` : ""}
           ${moderation === "reviewing" ? `<button onclick="recheckModeration('${item.id}')">Recheck</button>` : ""}
+          ${moderation === "rejected" && item.telegram?.fileId ? `<button onclick="retryRobloxUpload('${item.id}')">↺ Retry Roblox</button>` : ""}
         </div>
       ` : `<span>${item.roblox?.error || "Waiting..."}</span>`}</div>
     </article>`;
@@ -711,6 +756,16 @@ function applyLibraryFilter() {
   _renderItems(filtered);
 }
 
+window.retryRobloxUpload = async id => {
+  try {
+    await api(`/api/history/${encodeURIComponent(id)}/retry-roblox`, { method: "POST" });
+    toast("Retry Roblox dimulai.", "success");
+    refresh();
+    setTimeout(refresh, 3000);
+    setTimeout(refresh, 10000);
+    setTimeout(refresh, 20000);
+  } catch (e) { toast(e.message, "error"); }
+};
 window.recheckModeration = async id => {
   try {
     const r = await api(`/api/roblox/moderation/${id}/refresh`, { method: "POST" });
@@ -782,6 +837,7 @@ uploadBtn.onclick = () => {
       $("#progressText").textContent = "Processing Telegram + Roblox...";
       $("#progressBar").style.width = "100%";
       const result = JSON.parse(xhr.responseText);
+      window.MusicLabUploadLastId = result.id || null;
       toast("Upload diterima. Processing berjalan.", "success");
       setTimeout(refresh, 700);
       setTimeout(refresh, 4000);

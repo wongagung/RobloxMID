@@ -95,4 +95,22 @@ export async function sendAudioToTelegram(filePath, fileName, options = {}) {
   }
 }
 
+
+
+export async function downloadTelegramFile(fileId, outputPath) { // ROBLOXMID_TELEGRAM_ARCHIVE_V1
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error("Telegram credentials belum diatur.");
+  if (!fileId) throw new Error("Telegram file_id tidak ditemukan untuk retry.");
+  if (!outputPath) throw new Error("Output path wajib diisi.");
+
+  const bot = new TelegramBot(token, { polling: false });
+  const url = await bot.getFileLink(String(fileId));
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Gagal mengambil arsip Telegram (HTTP ${response.status}).`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!buffer.length) throw new Error("Arsip Telegram kosong.");
+  fs.writeFileSync(outputPath, buffer);
+  return outputPath;
+}
+
 export const TELEGRAM_SAFE_UPLOAD_BYTES = TELEGRAM_SAFE_BYTES;
