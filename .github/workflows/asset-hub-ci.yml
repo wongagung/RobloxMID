@@ -25,16 +25,24 @@ jobs:
       - name: Run repository check
         run: npm run check
 
-      - name: Reject obsolete runtime/UI layers
+      - name: Validate canonical runtime/UI structure
         run: |
           test ! -e server/youtube-download-fallback.js
           test ! -e public/playlist-ui-fix.js
-          test ! -e public/queue-ui.js
           test ! -e package.tmp-audit
-          if grep -R -nE 'youtube-download-fallback|playlist-ui-fix|queue-ui' server public package.json Dockerfile docker-compose.yml; then
+          test -e public/queue-ui.js
+          grep -R -nE 'queue-ui\.js' public/index.html public/app.js public/playlist-pagination.js public/queue-ui.js
+          if grep -R -nE 'youtube-download-fallback|playlist-ui-fix|package\.tmp-audit' server public package.json Dockerfile docker-compose.yml; then
             echo 'Obsolete runtime/UI reference found.'
             exit 1
           fi
+
+      - name: Validate cleanup and upload limits
+        run: |
+          grep -q 'safeUnlink(originalFilePath)' server/index.js
+          grep -q 'safeUnlink(convertedFilePath)' server/index.js
+          grep -q 'MAX_FILE_SIZE_MB=500' .env.example
+          grep -q 'MAX_FILE_SIZE_MB=500' docker-compose.yml
 
       - name: Reject accidental CommonJS in ESM server
         run: |
