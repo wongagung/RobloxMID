@@ -21,3 +21,9 @@ services:
     volumes:
       - ./uploads:/app/uploads
       - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/api/assets/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
