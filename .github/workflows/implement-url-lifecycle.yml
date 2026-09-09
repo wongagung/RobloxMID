@@ -1,0 +1,359 @@
+name: Apply URL lifecycle improvements
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: ${{ !contains(github.event.head_commit.message, '[url-lifecycle]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply implementation atomically
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          telegram = Path('server/telegram.js')
+          index = Path('server/index.js')
+          app = Path('public/app.js')
+
+          t = telegram.read_text(encoding='utf-8')
+          i = index.read_text(encoding='utf-8')
+          a = app.read_text(encoding='utf-8')
+
+          # Telegram archive downloader.
+          marker_t = 'ROBLOXMID_TELEGRAM_ARCHIVE_V1'
+          if marker_t not in t:
+              needle = 'export const TELEGRAM_SAFE_UPLOAD_BYTES = TELEGRAM_SAFE_BYTES;'
+              if needle not in t:
+                  raise SystemExit('telegram export anchor not found')
+              addition = '''
+
+export async function downloadTelegramFile(fileId, outputPath) { // ROBLOXMID_TELEGRAM_ARCHIVE_V1
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) throw new Error("Telegram credentials belum diatur.");
+  if (!fileId) throw new Error("Telegram file_id tidak ditemukan untuk retry.");
+  if (!outputPath) throw new Error("Output path wajib diisi.");
+
+  const bot = new TelegramBot(token, { polling: false });
+  const url = await bot.getFileLink(String(fileId));
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Gagal mengambil arsip Telegram (HTTP ${response.status}).`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  if (!buffer.length) throw new Error("Arsip Telegram kosong.");
+  fs.writeFileSync(outputPath, buffer);
+  return outputPath;
+}
+'''
+              t = t.replace(needle, addition + '\n' + needle, 1)
+              telegram.write_text(t, encoding='utf-8')
+
+          # Server-side retry from Telegram archive. No URL redownload required.
+          marker_i = 'ROBLOXMID_RETRY_FROM_TELEGRAM_V1'
+          if marker_i not in i:
+              old_import = 'import { sendAudioToTelegram } from "./telegram.js";'
+              new_import = 'import { sendAudioToTelegram, downloadTelegramFile } from "./telegram.js";'
+              if old_import not in i:
+                  raise SystemExit('telegram import anchor not found')
+              i = i.replace(old_import, new_import, 1)
+
+              anchor = 'app.get("/api/history/:id", (req, res) => {'
+              if anchor not in i:
+                  raise SystemExit('history route anchor not found')
+
+              route = r'''
+// Retry a Roblox upload from the Telegram archive. This deliberately does not redownload the source URL.
+app.post("/api/history/:id/retry-roblox", async (req, res) => { // ROBLOXMID_RETRY_FROM_TELEGRAM_V1
+  const history = readHistory();
+  const item = history.find(x => x.id === req.params.id);
+  if (!item) return res.status(404).json({ error: "Item tidak ditemukan." });
+  if (item.roblox?.moderation !== "rejected") return res.status(409).json({ error: "Retry Roblox hanya tersedia untuk asset yang ditolak moderasi." });
+  const archiveId = item.telegram?.fileId;
+  if (!archiveId) return res.status(409).json({ error: "Arsip Telegram untuk retry tidak tersedia." });
+  const account = getActiveAccount();
+  if (!account?.apiKey || !account?.userId) return res.status(503).json({ error: "Roblox belum dikonfigurasi." });
+  if (!process.env.TELEGRAM_BOT_TOKEN) return res.status(503).json({ error: "Telegram archive belum dikonfigurasi." });
+
+  const retryPath = path.join(uploadsDir, `retry-${crypto.randomUUID()}.mp3`);
+  try {
+    item.roblox = {
+      ...item.roblox,
+      status: "retrying",
+      moderation: "reviewing",
+      error: null,
+      retryCount: Number(item.roblox?.retryCount || 0) + 1,
+      retriedAt: new Date().toISOString(),
+      name: null
+    };
+    writeHistory(history);
+
+    await downloadTelegramFile(archiveId, retryPath);
+    const optimizedPath = await optimizeForRoblox(retryPath, { autoVary: process.env.AUTO_VARY !== "false" });
+    try {
+      const result = await uploadAudioToRoblox({
+        filePath: optimizedPath,
+        displayName: item.name || item.originalName || "Audio",
+        description: "Uploaded with Roblox Music Uploader",
+        userId: account.userId,
+        apiKey: account.apiKey
+      });
+
+      const latest = readHistory();
+      const latestItem = latest.find(x => x.id === item.id);
+      if (latestItem) {
+        latestItem.roblox = {
+          status: result.status,
+          name: result.robloxName || null,
+          assetId: result.assetId || null,
+          operationId: result.operationId || null,
+          moderation: result.moderation || (result.assetId ? "reviewing" : "reviewing"),
+          error: result.error || null,
+          retryCount: item.roblox.retryCount,
+          retriedAt: item.roblox.retriedAt
+        };
+        writeHistory(latest);
+        if (result.assetId) {
+          pollModeration(item.id, result.assetId).catch(e => console.error("Retry moderation poll error:", e.message));
+        }
+      }
+      return res.status(202).json({ ok: true, id: item.id, status: result.status });
+    } finally {
+      safeUnlink(optimizedPath);
+    }
+  } catch (error) {
+    const latest = readHistory();
+    const latestItem = latest.find(x => x.id === item.id);
+    if (latestItem) {
+      latestItem.roblox = {
+        ...latestItem.roblox,
+        status: "failed",
+        moderation: "rejected",
+        error: error?.message || "Retry Roblox gagal."
+      };
+      writeHistory(latest);
+    }
+    return res.status(502).json({ error: error?.message || "Retry Roblox gagal." });
+  } finally {
+    safeUnlink(retryPath);
+  }
+});
+
+'''
+              i = i.replace(anchor, route + anchor, 1)
+              index.write_text(i, encoding='utf-8')
+
+          # app.js: expose reliable upload completion and show Roblox name + retry.
+          marker_a = 'ROBLOXMID_URL_LIFECYCLE_V1'
+          if marker_a not in a:
+              # Queue items persist their actual uploaded history id and wait for server completion.
+              a = a.replace(
+                  'let _downloadQueue = []; // { id, title, file, thumbnail, status: \'waiting\'|\'ready\'|\'uploading\'|\'done\'|\'error\' }',
+                  'let _downloadQueue = []; // { id, title, file, thumbnail, status, historyId } // ROBLOXMID_URL_LIFECYCLE_V1',
+                  1
+              )
+
+              old_upload_click = 'uploadBtn.onclick = () => {'
+              if old_upload_click not in a:
+                  raise SystemExit('upload click anchor not found')
+              a = a.replace(old_upload_click, 'window.MusicLabUploadLastId = null;\nuploadBtn.onclick = () => {', 1)
+
+              old_success = '''      const result = JSON.parse(xhr.responseText);
+      toast("Upload diterima. Processing berjalan.", "success");'''
+              new_success = '''      const result = JSON.parse(xhr.responseText);
+      window.MusicLabUploadLastId = result.id || null;
+      toast("Upload diterima. Processing berjalan.", "success");'''
+              if old_success not in a:
+                  raise SystemExit('upload success anchor not found')
+              a = a.replace(old_success, new_success, 1)
+
+              old_queue_upload = '''      if (uploadBtn && !uploadBtn.disabled) {
+        uploadBtn.click();
+        item.status = "done";
+        setTimeout(renderQueue, 3000);
+      } else {
+        item.status = "error";
+        renderQueue();
+      }'''
+              new_queue_upload = '''      if (uploadBtn && !uploadBtn.disabled) {
+        window.MusicLabUploadLastId = null;
+        uploadBtn.click();
+        const startedAt = Date.now();
+        while (!window.MusicLabUploadLastId && Date.now() - startedAt < 15000) {
+          await new Promise(r => setTimeout(r, 150));
+        }
+        const historyId = window.MusicLabUploadLastId;
+        if (!historyId) {
+          item.status = "error";
+          renderQueue();
+          return;
+        }
+        item.historyId = historyId;
+        item.status = "uploading";
+        renderQueue();
+        let finalStatus = "uploading";
+        for (let attempt = 0; attempt < 120; attempt++) {
+          try {
+            const h = await api(`/api/history/${encodeURIComponent(historyId)}`);
+            const robloxDone = ["completed","processing","skipped","failed"].includes(h.roblox?.status);
+            const telegramDone = ["sent","skipped","failed"].includes(h.telegram?.status);
+            if (robloxDone && telegramDone) {
+              finalStatus = h.roblox?.moderation === "rejected" ? "rejected" :
+                (h.roblox?.status === "failed" ? "error" : "done");
+              item.status = finalStatus;
+              item.historyId = historyId;
+              renderQueue();
+              return;
+            }
+          } catch {}
+          await new Promise(r => setTimeout(r, 1000));
+        }
+        item.status = "uploading";
+        renderQueue();
+      } else {
+        item.status = "error";
+        renderQueue();
+      }'''
+              if old_queue_upload not in a:
+                  raise SystemExit('queue upload block not found')
+              a = a.replace(old_queue_upload, new_queue_upload, 1)
+
+              old_status_text = '''            item.status === "done"      ? "✓ Selesai diupload" :
+            item.status === "error"     ? "✗ Gagal" : ""'''
+              new_status_text = '''            item.status === "done"      ? "✓ Selesai Upload" :
+            item.status === "rejected"  ? "✕ Ditolak moderasi" :
+            item.status === "error"     ? "✗ Gagal" : ""'''
+              if old_status_text not in a:
+                  raise SystemExit('queue status text block not found')
+              a = a.replace(old_status_text, new_status_text, 1)
+
+              old_error_action = '${item.status === "error" ? `<button class="ghost-btn queue-retry-btn" data-qi="${i}">↺ Retry</button>` : ""}'
+              new_error_action = '''${item.status === "error" ? `<button class="ghost-btn queue-retry-btn" data-qi="${i}">↺ Retry Download</button>` : ""}
+          ${item.status === "rejected" && item.historyId ? `<button class="ghost-btn queue-retry-roblox-btn" data-qi="${i}">↺ Retry Roblox</button>` : ""}'''
+              if old_error_action not in a:
+                  raise SystemExit('queue error action anchor not found')
+              a = a.replace(old_error_action, new_error_action, 1)
+
+              retry_anchor = '''  queueList.querySelectorAll(".queue-retry-btn").forEach(btn => {'''
+              if retry_anchor not in a:
+                  raise SystemExit('queue retry anchor not found')
+              retry_block = '''  queueList.querySelectorAll(".queue-retry-roblox-btn").forEach(btn => {
+    btn.onclick = async () => {
+      const idx = parseInt(btn.dataset.qi);
+      const item = _downloadQueue[idx];
+      if (!item?.historyId) return;
+      item.status = "uploading";
+      renderQueue();
+      try {
+        await api(`/api/history/${encodeURIComponent(item.historyId)}/retry-roblox`, { method: "POST" });
+        item.status = "uploading";
+        for (let attempt = 0; attempt < 120; attempt++) {
+          const h = await api(`/api/history/${encodeURIComponent(item.historyId)}`);
+          if (h.roblox?.status === "completed" || h.roblox?.status === "failed") {
+            item.status = h.roblox?.moderation === "rejected" ? "rejected" : (h.roblox?.status === "failed" ? "error" : "done");
+            renderQueue();
+            return;
+          }
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      } catch (e) {
+        item.status = "rejected";
+        renderQueue();
+        toast(e.message, "error");
+      }
+      renderQueue();
+    };
+  });
+
+'''
+              a = a.replace(retry_anchor, retry_block + retry_anchor, 1)
+
+              # History display: Roblox name + moderation retry.
+              old_asset_actions = '''          ${moderation === "reviewing" ? `<button onclick="recheckModeration('${item.id}')">Recheck</button>` : ""}'''
+              new_asset_actions = '''          ${moderation === "reviewing" ? `<button onclick="recheckModeration('${item.id}')">Recheck</button>` : ""}
+          ${moderation === "rejected" && item.telegram?.fileId ? `<button onclick="retryRobloxUpload('${item.id}')">↺ Retry Roblox</button>` : ""}'''
+              if old_asset_actions not in a:
+                  raise SystemExit('history action anchor not found')
+              a = a.replace(old_asset_actions, new_asset_actions, 1)
+
+              old_row_main = '''        <strong>${escapeHtml(item.name)}</strong>
+        <span>${escapeHtml(item.originalName)} · ${formatSize(item.size)} · ${formatDateTime(item.createdAt)}</span>'''
+              new_row_main = '''        <strong>${escapeHtml(item.name)}</strong>
+        <span>${escapeHtml(item.originalName)} · ${formatSize(item.size)} · ${formatDateTime(item.createdAt)}</span>
+        ${item.roblox?.name ? `<span class="roblox-name-label">🎮 Roblox: <b>${escapeHtml(item.roblox.name)}</b></span>` : ""}'''
+              if old_row_main not in a:
+                  raise SystemExit('history row anchor not found')
+              a = a.replace(old_row_main, new_row_main, 1)
+
+              retry_fn_anchor = 'window.recheckModeration = async id => {'
+              if retry_fn_anchor not in a:
+                  raise SystemExit('recheck function anchor not found')
+              retry_fn = '''window.retryRobloxUpload = async id => {
+  try {
+    await api(`/api/history/${encodeURIComponent(id)}/retry-roblox`, { method: "POST" });
+    toast("Retry Roblox dimulai.", "success");
+    refresh();
+    setTimeout(refresh, 3000);
+    setTimeout(refresh, 10000);
+    setTimeout(refresh, 20000);
+  } catch (e) { toast(e.message, "error"); }
+};
+'''
+              a = a.replace(retry_fn_anchor, retry_fn + retry_fn_anchor, 1)
+
+              # Fix the legacy local toast visibility by routing it through canonical notification UI when available.
+              old_toast = '''function toast(msg, type="") {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.className = `toast show ${type}`;
+  setTimeout(() => el.className = "toast", 3200);
+}'''
+              new_toast = '''function toast(msg, type="") {
+  if (window.MusicLabNotify) return window.MusicLabNotify(msg, type === "error" ? "error" : "success");
+  const el = $("#toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = `toast show ${type}`;
+  setTimeout(() => el.className = "toast", 3200);
+}'''
+              if old_toast not in a:
+                  raise SystemExit('toast block not found')
+              a = a.replace(old_toast, new_toast, 1)
+
+              app.write_text(a, encoding='utf-8')
+
+          # The temporary workflow must never remain in the production tree.
+          Path('.github/workflows/implement-url-lifecycle.yml').unlink()
+          print('URL lifecycle implementation applied.')
+          PY
+
+      - name: Validate implementation
+        run: |
+          node --check server/index.js
+          node --check server/telegram.js
+          node --check public/app.js
+          npm ci --omit=dev
+          npm run check
+          grep -q 'ROBLOXMID_TELEGRAM_ARCHIVE_V1' server/telegram.js
+          grep -q 'ROBLOXMID_RETRY_FROM_TELEGRAM_V1' server/index.js
+          grep -q 'retry-roblox' server/index.js
+          grep -q 'Roblox:.*item.roblox.name\|item.roblox.name' public/app.js
+          grep -q 'ROBLOXMID_URL_LIFECYCLE_V1' public/app.js
+          git diff --check
+          test ! -e .github/workflows/implement-url-lifecycle.yml
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add server/telegram.js server/index.js public/app.js .github/workflows/implement-url-lifecycle.yml
+          git diff --cached --check
+          git commit -m "feat: harden URL upload lifecycle and Roblox retry [url-lifecycle]"
+          git push
