@@ -1,7 +1,6 @@
-/* RobloxMID canonical UI foundation: queue, controls, notifications and confirmation modal. */
+/* RobloxMID canonical UI foundation: queue, controls, notifications, confirmation, and hardening. */
 (() => {
   "use strict";
-
   const css = `
     #queuePanel.queue-panel{padding:26px !important;margin-top:18px !important}
     #queuePanel .panel-head{display:flex !important;justify-content:space-between !important;align-items:center !important;margin:0 0 20px !important;gap:14px !important}
@@ -25,7 +24,6 @@
     #queuePanel .queue-error-detail{margin-top:6px !important;padding:6px 8px !important;border:1px solid #fb71851f !important;border-radius:8px !important;background:#fb718508 !important;color:#fda4af !important;font-size:10px !important;line-height:1.4 !important;white-space:normal !important;overflow-wrap:anywhere !important}
     #queuePanel .queue-download-progress{height:4px !important;margin-top:7px !important;border-radius:999px !important;overflow:hidden !important;background:#ffffff0a !important}
     #queuePanel .queue-download-progress>i{display:block !important;height:100% !important;background:linear-gradient(90deg,#8b5cf6,#22d3ee) !important;transition:width .15s ease !important}
-
     #playlistPagination select,.playlist-limit-select,#queuePanel select,select.ui-select{appearance:none !important;-webkit-appearance:none !important;min-height:36px !important;min-width:118px !important;padding:8px 38px 8px 12px !important;border:1px solid var(--line) !important;border-radius:10px !important;background-color:#080b13 !important;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2398A2B3' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;background-repeat:no-repeat !important;background-position:right 12px center !important;background-size:14px 14px !important;color:var(--text) !important;font:inherit !important;font-size:11px !important;font-weight:750 !important;line-height:1.2 !important;outline:none !important;cursor:pointer !important;color-scheme:dark !important;box-shadow:inset 0 1px 0 #ffffff08 !important}
     #playlistPagination select:focus,#queuePanel select:focus,select.ui-select:focus{border-color:#8b5cf666 !important;box-shadow:0 0 0 3px #8b5cf612 !important}
     #playlistPagination select:hover,#queuePanel select:hover,select.ui-select:hover{border-color:#ffffff18 !important}
@@ -34,141 +32,64 @@
     body.light #playlistPagination select option,body.light #queuePanel select option,body.light select.ui-select option{background:#fff;color:#111827}
     #playlistPagination{align-items:center !important}
     #playlistPagination .pager-actions{display:flex !important;align-items:center !important;gap:7px !important;flex-wrap:wrap !important}
-
     #toast{display:none !important}
     #mlNotifyStack{position:fixed;right:22px;bottom:22px;z-index:1100;display:flex;flex-direction:column;align-items:flex-end;gap:9px;width:min(420px,calc(100vw - 44px));pointer-events:none}
     .ml-notify{position:relative;display:grid;grid-template-columns:32px minmax(0,1fr) 22px;align-items:center;gap:10px;width:100%;padding:11px 11px 11px 12px;border:1px solid var(--line);border-radius:13px;background:rgba(17,21,33,.96);box-shadow:0 18px 55px rgba(0,0,0,.4);color:var(--text);backdrop-filter:blur(16px);pointer-events:auto;animation:mlNotifyIn .2s ease}
     .ml-notify-icon{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:#22d3ee12;color:#67e8f9;font-weight:900;font-size:14px}
-    .ml-notify-body{min-width:0}
-    .ml-notify-title{font-size:11px;font-weight:850;line-height:1.2;color:var(--text)}
-    .ml-notify-message{margin-top:3px;font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}
-    .ml-notify-close{width:22px;height:22px;padding:0 !important;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:7px;font-size:15px;line-height:1}
-    .ml-notify-close:hover{background:#ffffff08;color:var(--text)}
-    .ml-notify.success{border-color:#36e0a144}.ml-notify.success .ml-notify-icon{background:#36e0a112;color:#6ee7b7}
-    .ml-notify.error{border-color:#fb718544}.ml-notify.error .ml-notify-icon{background:#fb718512;color:#fda4af}
-    .ml-notify.info{border-color:#22d3ee33}
-    @keyframes mlNotifyIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
-
-    #mlConfirm[hidden]{display:none !important}
-    #mlConfirm{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:20px}
-    #mlConfirm .ml-backdrop{position:absolute;inset:0;background:rgba(3,6,12,.68);backdrop-filter:blur(7px)}
-    #mlConfirm .ml-dialog{position:relative;width:min(430px,100%);padding:22px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(145deg,#141a2a,#0d111c);box-shadow:0 28px 90px rgba(0,0,0,.52)}
-    #mlConfirm .ml-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:#fb71851a;color:#fda4af;font-size:18px;margin-bottom:14px}
-    #mlConfirm h3{margin:0;color:var(--text);font-size:16px;line-height:1.3}
-    #mlConfirm p{margin:7px 0 0;color:var(--muted);font-size:12px;line-height:1.5}
-    #mlConfirm .ml-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}
-    #mlConfirm .ml-actions button{width:auto;min-width:88px;min-height:36px;margin:0;padding:8px 12px;border-radius:10px;border:1px solid var(--line);font:inherit;font-size:11px;font-weight:750;cursor:pointer}
-    #mlConfirm .ml-cancel{background:#ffffff05;color:var(--text)}
-    #mlConfirm .ml-ok{border-color:#fb718544;background:#fb71851a;color:#fda4af}
-    body.light #mlConfirm .ml-dialog{background:#fff}
-    body.light .ml-notify{background:rgba(255,255,255,.97);color:#111827}
-
+    .ml-notify-body{min-width:0}.ml-notify-title{font-size:11px;font-weight:850;line-height:1.2;color:var(--text)}.ml-notify-message{margin-top:3px;font-size:11px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}.ml-notify-close{width:22px;height:22px;padding:0 !important;border:0;background:transparent;color:var(--muted);cursor:pointer;border-radius:7px;font-size:15px;line-height:1}.ml-notify-close:hover{background:#ffffff08;color:var(--text)}
+    .ml-notify.success{border-color:#36e0a144}.ml-notify.success .ml-notify-icon{background:#36e0a112;color:#6ee7b7}.ml-notify.error{border-color:#fb718544}.ml-notify.error .ml-notify-icon{background:#fb718512;color:#fda4af}.ml-notify.info{border-color:#22d3ee33}@keyframes mlNotifyIn{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
+    #mlConfirm[hidden]{display:none !important}#mlConfirm{position:fixed;inset:0;z-index:1200;display:grid;place-items:center;padding:20px}#mlConfirm .ml-backdrop{position:absolute;inset:0;background:rgba(3,6,12,.68);backdrop-filter:blur(7px)}#mlConfirm .ml-dialog{position:relative;width:min(430px,100%);padding:22px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(145deg,#141a2a,#0d111c);box-shadow:0 28px 90px rgba(0,0,0,.52)}#mlConfirm .ml-icon{width:40px;height:40px;display:grid;place-items:center;border-radius:12px;background:#fb71851a;color:#fda4af;font-size:18px;margin-bottom:14px}#mlConfirm h3{margin:0;color:var(--text);font-size:16px;line-height:1.3}#mlConfirm p{margin:7px 0 0;color:var(--muted);font-size:12px;line-height:1.5}#mlConfirm .ml-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:20px}#mlConfirm .ml-actions button{width:auto;min-width:88px;min-height:36px;margin:0;padding:8px 12px;border-radius:10px;border:1px solid var(--line);font:inherit;font-size:11px;font-weight:750;cursor:pointer}#mlConfirm .ml-cancel{background:#ffffff05;color:var(--text)}#mlConfirm .ml-ok{border-color:#fb718544;background:#fb71851a;color:#fda4af}body.light #mlConfirm .ml-dialog{background:#fff}body.light .ml-notify{background:rgba(255,255,255,.97);color:#111827}
     @media(max-width:700px){#queuePanel.queue-panel{padding:18px !important}#queuePanel .panel-head{align-items:flex-start !important}#queuePanel .queue-item{grid-template-columns:42px minmax(0,1fr) !important;gap:12px !important;padding:13px 0 !important}#queuePanel .queue-thumb{width:42px !important;height:42px !important}#queuePanel .queue-actions{grid-column:2 !important;justify-content:flex-start !important;min-width:0 !important}#queuePanel .queue-title{white-space:normal !important;overflow-wrap:anywhere !important}}
     @media(max-width:480px){#queuePanel.queue-panel{padding:16px !important}#queuePanel .queue-item{grid-template-columns:40px minmax(0,1fr) !important;gap:10px !important}#queuePanel .queue-thumb{width:40px !important;height:40px !important}#queuePanel .queue-actions{grid-column:1 / -1 !important}#queuePanel .panel-head{gap:10px !important}#queuePanel .panel-head h2{font-size:15px !important}}
     @media(max-width:560px){#mlNotifyStack{right:12px;bottom:12px;width:calc(100vw - 24px)}#mlConfirm .ml-dialog{padding:18px}#mlConfirm .ml-actions{flex-direction:column-reverse}#mlConfirm .ml-actions button{width:100%}}
+    #rmpOps{margin-top:18px;padding:18px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(145deg,#101522cc,#0c111bcc)}#rmpOps h3{margin:0;color:var(--text);font-size:14px}.rmpSub{margin:3px 0 12px;color:var(--muted);font-size:11px}.rmpGrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.rmpCard{padding:10px;border:1px solid var(--line);border-radius:11px;background:#ffffff03}.rmpCard b{display:block;color:var(--text);font-size:11px}.rmpCard span{display:block;margin-top:3px;color:var(--muted);font-size:10px;overflow-wrap:anywhere}.rmpCard.good b{color:#6ee7b7}.rmpCard.warn b{color:#fbbf24}.rmpCard.bad b{color:#fda4af}.rmpActions{display:flex;gap:7px;margin-top:10px;flex-wrap:wrap}.rmpActions button{width:auto;min-height:32px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:#ffffff05;color:var(--text);cursor:pointer;font:inherit;font-size:10px}.rmpResume{margin-top:10px;padding:10px;border:1px dashed var(--line);border-radius:10px}.rmpResume strong{font-size:11px;color:var(--text)}.rmpRow{display:flex;gap:8px;align-items:center;padding:7px 0;border-top:1px solid var(--line)}.rmpRow:first-child{border-top:0}.rmpUrl{min-width:0;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:10px}.rmpRow button{width:auto;min-height:30px;padding:6px 9px;font-size:10px;border:1px solid var(--line);border-radius:8px;background:#ffffff05;color:var(--text);cursor:pointer}@media(max-width:700px){.rmpGrid{grid-template-columns:1fr}}
   `;
 
-  function ensureStyles(){
-    if(document.getElementById("robloxMidQueueCanonicalCss")) return;
-    const style=document.createElement("style");
-    style.id="robloxMidQueueCanonicalCss";
-    style.textContent=css;
-    document.head.appendChild(style);
-  }
-
-  function ensureNotifyStack(){
-    let stack=document.getElementById("mlNotifyStack");
-    if(stack) return stack;
-    stack=document.createElement("div");
-    stack.id="mlNotifyStack";
-    stack.setAttribute("aria-live","polite");
-    stack.setAttribute("aria-atomic","false");
-    document.body.appendChild(stack);
-    return stack;
-  }
-
-  function notify(message,type="info",title=""){
-    const stack=ensureNotifyStack();
-    const item=document.createElement("div");
-    item.className=`ml-notify ${["success","error","info"].includes(type)?type:"info"}`;
-    const icon=type==="success"?"✓":type==="error"?"!":"i";
-    const heading=title||(type==="success"?"Berhasil":type==="error"?"Gagal":"Info");
-    item.innerHTML=`<div class="ml-notify-icon">${icon}</div><div class="ml-notify-body"><div class="ml-notify-title"></div><div class="ml-notify-message"></div></div><button type="button" class="ml-notify-close" aria-label="Tutup">×</button>`;
-    item.querySelector(".ml-notify-title").textContent=heading;
-    item.querySelector(".ml-notify-message").textContent=String(message||"");
-    const close=()=>item.remove();
-    item.querySelector(".ml-notify-close").onclick=close;
-    stack.appendChild(item);
-    setTimeout(close,4200);
-  }
-
-  function ensureConfirm(){
-    let root=document.getElementById("mlConfirm");
-    if(root) return root;
-    root=document.createElement("div");
-    root.id="mlConfirm";
-    root.hidden=true;
-    root.innerHTML='<div class="ml-backdrop"></div><div class="ml-dialog" role="dialog" aria-modal="true" aria-labelledby="mlConfirmTitle"><div class="ml-icon">!</div><h3 id="mlConfirmTitle">Konfirmasi</h3><p id="mlConfirmMessage"></p><div class="ml-actions"><button type="button" class="ml-cancel">Batal</button><button type="button" class="ml-ok">Konfirmasi</button></div></div>';
-    document.body.appendChild(root);
-    return root;
-  }
-
-  function confirmInApp({title="Konfirmasi",message="Lanjutkan tindakan ini?",confirmText="Konfirmasi"}={}){
-    const root=ensureConfirm();
-    root.querySelector("#mlConfirmTitle").textContent=title;
-    root.querySelector("#mlConfirmMessage").textContent=message;
-    const ok=root.querySelector(".ml-ok");
-    const cancel=root.querySelector(".ml-cancel");
-    ok.textContent=confirmText;
-    root.hidden=false;
-    document.body.classList.add("ml-modal-open");
-    return new Promise(resolve=>{
-      let settled=false;
-      const finish=value=>{if(settled)return;settled=true;root.hidden=true;document.body.classList.remove("ml-modal-open");document.removeEventListener("keydown",onKey,true);ok.onclick=null;cancel.onclick=null;root.querySelector(".ml-backdrop").onclick=null;resolve(value)};
-      const onKey=e=>{if(e.key==="Escape"){e.preventDefault();finish(false)}else if(e.key==="Enter"){e.preventDefault();finish(true)}};
-      ok.onclick=()=>finish(true);
-      cancel.onclick=()=>finish(false);
-      root.querySelector(".ml-backdrop").onclick=()=>finish(false);
-      document.addEventListener("keydown",onKey,true);
-      setTimeout(()=>ok.focus(),0);
-    });
-  }
-
-  function installAccountDeleteInterceptor(){
-    if(document.documentElement.dataset.musiclabConfirmInstalled==="1") return;
-    document.documentElement.dataset.musiclabConfirmInstalled="1";
-    document.addEventListener("click",async event=>{
-      const button=event.target.closest?.(".account-delete-btn");
-      if(!button) return;
-      event.preventDefault();
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      const row=button.closest(".account-item");
-      const label=row?.querySelector(".account-label")?.textContent?.replace("✓","").trim() || "akun Roblox";
-      const confirmed=await confirmInApp({title:"Hapus akun Roblox?",message:`Akun ${label} akan dihapus dari daftar akun. Tindakan ini tidak dapat dibatalkan.`,confirmText:"Hapus"});
-      if(!confirmed) return;
-      const id=button.dataset.id;
-      try{
-        const response=await fetch(`/api/roblox-accounts/${encodeURIComponent(id)}`,{method:"DELETE"});
-        const data=await response.json().catch(()=>({}));
-        if(!response.ok) throw new Error(data.error||"Gagal menghapus akun.");
-        notify("Akun berhasil dihapus.","success");
-        if(typeof loadAccounts==="function") await loadAccounts();
-      }catch(error){
-        notify(error?.message||"Gagal menghapus akun.","error");
-      }
-    },true);
-  }
-
-  function install(){
-    ensureStyles();
-    ensureNotifyStack();
-    ensureConfirm();
-    installAccountDeleteInterceptor();
-    window.MusicLabNotify=notify;
-    window.MusicLabConfirm=confirmInApp;
-    window.toast=(message,type="")=>notify(message,type);
-  }
-
+  function ensureStyles(){if(document.getElementById("robloxMidQueueCanonicalCss"))return;const style=document.createElement("style");style.id="robloxMidQueueCanonicalCss";style.textContent=css;document.head.appendChild(style)}
+  function ensureNotifyStack(){let stack=document.getElementById("mlNotifyStack");if(stack)return stack;stack=document.createElement("div");stack.id="mlNotifyStack";stack.setAttribute("aria-live","polite");stack.setAttribute("aria-atomic","false");document.body.appendChild(stack);return stack}
+  function notify(message,type="info",title=""){const stack=ensureNotifyStack();const item=document.createElement("div");item.className=`ml-notify ${["success","error","info"].includes(type)?type:"info"}`;const icon=type==="success"?"✓":type==="error"?"!":"i";const heading=title||(type==="success"?"Berhasil":type==="error"?"Gagal":"Info");item.innerHTML=`<div class="ml-notify-icon">${icon}</div><div class="ml-notify-body"><div class="ml-notify-title"></div><div class="ml-notify-message"></div></div><button type="button" class="ml-notify-close" aria-label="Tutup">×</button>`;item.querySelector(".ml-notify-title").textContent=heading;item.querySelector(".ml-notify-message").textContent=String(message||"");const close=()=>item.remove();item.querySelector(".ml-notify-close").onclick=close;stack.appendChild(item);setTimeout(close,4200)}
+  function ensureConfirm(){let root=document.getElementById("mlConfirm");if(root)return root;root=document.createElement("div");root.id="mlConfirm";root.hidden=true;root.innerHTML='<div class="ml-backdrop"></div><div class="ml-dialog" role="dialog" aria-modal="true" aria-labelledby="mlConfirmTitle"><div class="ml-icon">!</div><h3 id="mlConfirmTitle">Konfirmasi</h3><p id="mlConfirmMessage"></p><div class="ml-actions"><button type="button" class="ml-cancel">Batal</button><button type="button" class="ml-ok">Konfirmasi</button></div></div>';document.body.appendChild(root);return root}
+  function confirmInApp({title="Konfirmasi",message="Lanjutkan tindakan ini?",confirmText="Konfirmasi"}={}){const root=ensureConfirm();root.querySelector("#mlConfirmTitle").textContent=title;root.querySelector("#mlConfirmMessage").textContent=message;const ok=root.querySelector(".ml-ok"),cancel=root.querySelector(".ml-cancel");ok.textContent=confirmText;root.hidden=false;document.body.classList.add("ml-modal-open");return new Promise(resolve=>{let settled=false;const finish=value=>{if(settled)return;settled=true;root.hidden=true;document.body.classList.remove("ml-modal-open");document.removeEventListener("keydown",onKey,true);ok.onclick=null;cancel.onclick=null;root.querySelector(".ml-backdrop").onclick=null;resolve(value)};const onKey=e=>{if(e.key==="Escape"){e.preventDefault();finish(false)}else if(e.key==="Enter"){e.preventDefault();finish(true)}};ok.onclick=()=>finish(true);cancel.onclick=()=>finish(false);root.querySelector(".ml-backdrop").onclick=()=>finish(false);document.addEventListener("keydown",onKey,true);setTimeout(()=>ok.focus(),0)})}
+  function installAccountDeleteInterceptor(){if(document.documentElement.dataset.musiclabConfirmInstalled==="1")return;document.documentElement.dataset.musiclabConfirmInstalled="1";document.addEventListener("click",async event=>{const button=event.target.closest?.(".account-delete-btn");if(!button)return;event.preventDefault();event.stopPropagation();event.stopImmediatePropagation();const row=button.closest(".account-item"),label=row?.querySelector(".account-label")?.textContent?.replace("✓","").trim()||"akun Roblox";const confirmed=await confirmInApp({title:"Hapus akun Roblox?",message:`Akun ${label} akan dihapus dari daftar akun. Tindakan ini tidak dapat dibatalkan.`,confirmText:"Hapus"});if(!confirmed)return;const id=button.dataset.id;try{const response=await fetch(`/api/roblox-accounts/${encodeURIComponent(id)}`,{method:"DELETE"});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||"Gagal menghapus akun.");notify("Akun berhasil dihapus.","success");if(typeof loadAccounts==="function")await loadAccounts()}catch(error){notify(error?.message||"Gagal menghapus akun.","error")}},true)}
+  function install(){ensureStyles();ensureNotifyStack();ensureConfirm();installAccountDeleteInterceptor();window.MusicLabNotify=notify;window.MusicLabConfirm=confirmInApp;window.toast=(message,type="")=>notify(message,type)}
   install();
+
+  // Hardening: allow the main uploader's 500 MB input limit to pass through the
+  // old 20 MB client guard without changing the existing upload request flow.
+  const HARD_MAX = 500 * 1024 * 1024;
+  const FP_KEY = "robloxmid.audio.fp.v1";
+  const RESUME_KEY = "robloxmid.download.resume.v1";
+  const json = (key,fallback=[]) => { try { return JSON.parse(localStorage.getItem(key)||"") ?? fallback; } catch { return fallback; } };
+  const fmt = bytes => { if (!Number.isFinite(bytes)||bytes<=0) return "0 B"; const u=["B","KB","MB","GB"]; let i=0,v=bytes; while(v>=1024&&i<u.length-1){v/=1024;i++} return `${v.toFixed(i?1:0)} ${u[i]}`; };
+  async function smallFingerprint(file){
+    const chunk=Math.min(1024*1024,file.size), parts=[new Uint8Array(await file.slice(0,chunk).arrayBuffer())];
+    if(file.size>chunk*2){const start=Math.floor(file.size/2-chunk/2);parts.push(new Uint8Array(await file.slice(start,start+chunk).arrayBuffer()))}
+    if(file.size>chunk)parts.push(new Uint8Array(await file.slice(file.size-chunk).arrayBuffer()));
+    const all=new Uint8Array(parts.reduce((n,p)=>n+p.length,16)); new DataView(all.buffer).setBigUint64(0,BigInt(file.size),false); let off=16;
+    for(const part of parts){all.set(part,off);off+=part.length}
+    return [...new Uint8Array(await crypto.subtle.digest("SHA-256",all))].map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  async function acceptLargeFile(file){
+    if(!file)return;
+    if(file.size>HARD_MAX){notify(`File terlalu besar. Maksimal ${fmt(HARD_MAX)}.`,"error");return}
+    if(window.MusicLabTrack?.set)window.MusicLabTrack.set(file);
+    const selected=document.getElementById("selected"),dropzone=document.getElementById("dropzone"),preview=document.getElementById("previewBox"),audio=document.getElementById("audio"),name=document.getElementById("assetName");
+    selected?.classList.remove("hidden");dropzone?.classList.add("has-file");preview?.classList.remove("hidden");
+    const ext=(file.name.split(".").pop()||"?").toUpperCase();document.getElementById("fileName").textContent=file.name;document.getElementById("fileMeta").textContent=`${fmt(file.size)} · ${ext}`;if(name)name.value=file.name.replace(/\.[^/.]+$/,"").slice(0,50)||"Track";
+    if(audio&&!audio.src)audio.src=URL.createObjectURL(file);
+    try{const hash=await smallFingerprint(file),list=json(FP_KEY);const old=list.find(x=>x.hash===hash);if(old)notify(`Track kemungkinan duplikat: ${old.name||file.name}`,"info");localStorage.setItem(FP_KEY,JSON.stringify([{hash,name:file.name,size:file.size,at:Date.now()},...list.filter(x=>x.hash!==hash)].slice(0,100)))}catch{}
+    document.dispatchEvent(new CustomEvent("musiclab:file-selected",{detail:{file}}));notify(`File ${fmt(file.size)} siap diproses.`,"success");
+  }
+  function installLargeGuard(){
+    const input=document.getElementById("fileInput"),drop=document.getElementById("dropzone");
+    if(input&&!input.dataset.rmpLargeGuard){input.dataset.rmpLargeGuard="1";input.addEventListener("change",e=>{const file=input.files?.[0];if(file&&file.size>20*1024*1024){e.preventDefault();e.stopImmediatePropagation();acceptLargeFile(file)}},true)}
+    if(drop&&!drop.dataset.rmpLargeGuard){drop.dataset.rmpLargeGuard="1";drop.addEventListener("drop",e=>{const file=e.dataTransfer?.files?.[0];if(file&&file.size>20*1024*1024){e.preventDefault();e.stopImmediatePropagation();acceptLargeFile(file)}},true)}
+  }
+  function saveResume(url){const list=json(RESUME_KEY).filter(x=>x.url!==url);list.unshift({url,at:Date.now()});localStorage.setItem(RESUME_KEY,JSON.stringify(list.slice(0,20)));renderResume()}
+  function removeResume(url){localStorage.setItem(RESUME_KEY,JSON.stringify(json(RESUME_KEY).filter(x=>x.url!==url)));renderResume()}
+  function renderResume(){const panel=document.getElementById("rmpResume");if(!panel)return;const list=json(RESUME_KEY);if(!list.length){panel.classList.add("hidden");panel.innerHTML="";return}panel.classList.remove("hidden");panel.innerHTML=`<strong>↻ Interrupted downloads</strong>${list.map(x=>`<div class="rmpRow"><span class="rmpUrl" title="${x.url}">${x.url}</span><button data-url="${encodeURIComponent(x.url)}">Resume</button></div>`).join("")}`;panel.querySelectorAll("button").forEach(b=>b.onclick=()=>{const url=decodeURIComponent(b.dataset.url),tab=document.querySelector('.source-tab[data-source="url"]'),input=document.getElementById("urlInput");tab?.click();if(input){input.value=url;input.dispatchEvent(new Event("input",{bubbles:true}));document.getElementById("urlInfoBtn")?.click()}})}
+  function patchEventSource(){const Native=window.EventSource;if(!Native||Native.__rmpHardening)return;function Hard(url,config){const u=String(url),track=u.includes("/api/fetch-url-stream");if(track)saveResume(u);const es=new Native(url,config);if(track){es.addEventListener("file",()=>removeResume(u));es.addEventListener("error",()=>saveResume(u))}return es}Hard.prototype=Native.prototype;Hard.CONNECTING=Native.CONNECTING;Hard.OPEN=Native.OPEN;Hard.CLOSED=Native.CLOSED;Hard.__rmpHardening=true;window.EventSource=Hard}
+  function addOpsPanel(){const parent=document.querySelector(".status-panel");if(!parent||document.getElementById("rmpOps"))return;const panel=document.createElement("div");panel.id="rmpOps";panel.innerHTML=`<h3>⚙ System Health</h3><p class="rmpSub">Runtime, limits, duplicate guard, and recovery</p><div id="rmpGrid" class="rmpGrid"></div><div class="rmpActions"><button id="rmpRefresh">↻ Refresh</button><button id="rmpClear">Clear duplicate cache</button></div><div id="rmpResume" class="rmpResume hidden"></div>`;parent.appendChild(panel);document.getElementById("rmpRefresh").onclick=loadOps;document.getElementById("rmpClear").onclick=()=>{localStorage.removeItem(FP_KEY);notify("Duplicate cache cleared.")}}
+  async function loadOps(){const grid=document.getElementById("rmpGrid");if(!grid)return;try{const cfg=await(await fetch("/api/config",{cache:"no-store"})).json(),health=await(await fetch("/api/assets/health",{cache:"no-store"})).json();const rows=[["Upload",Number(cfg.maxFileSizeMb)>=500,`${cfg.maxFileSizeMb||0} MB`],["yt-dlp",!!cfg.ytdlpAvailable,cfg.ytdlpVersion||"Unavailable"],["Roblox",!!cfg.robloxConfigured,cfg.robloxConfigured?"Configured":"Not configured"],["Telegram",!!cfg.telegramConfigured,cfg.telegramConfigured?"Configured":"Not configured"],["Asset Hub",!!health.ok,health.service||"Unavailable"]];grid.innerHTML=rows.map(r=>`<div class="rmpCard ${r[1]?"good":"warn"}"><b>${r[1]?"✓":"!"} ${r[0]}</b><span>${r[2]}</span></div>`).join("")}catch(e){grid.innerHTML=`<div class="rmpCard bad"><b>✗ Diagnostics failed</b><span>${e.message||"Request failed"}</span></div>`}}
+  installLargeGuard();patchEventSource();addOpsPanel();renderResume();loadOps();
 })();
