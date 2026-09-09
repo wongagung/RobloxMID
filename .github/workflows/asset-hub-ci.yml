@@ -1,4 +1,4 @@
-name: Asset Hub CI
+name: RobloxMID CI
 
 on:
   push:
@@ -22,9 +22,19 @@ jobs:
       - name: Install dependencies
         run: npm ci --omit=dev
 
-      - name: Syntax check every JavaScript file
+      - name: Run repository check
+        run: npm run check
+
+      - name: Reject obsolete runtime/UI layers
         run: |
-          find server public -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+          test ! -e server/youtube-download-fallback.js
+          test ! -e public/playlist-ui-fix.js
+          test ! -e public/queue-ui.js
+          test ! -e package.tmp-audit
+          if grep -R -nE 'youtube-download-fallback|playlist-ui-fix|queue-ui' server public package.json Dockerfile docker-compose.yml; then
+            echo 'Obsolete runtime/UI reference found.'
+            exit 1
+          fi
 
       - name: Reject accidental CommonJS in ESM server
         run: |
@@ -37,6 +47,12 @@ jobs:
         run: |
           test -s .env.example
           ! grep -nE '(^|[[:space:]])-e([[:space:]]|$)' .env.example
+
+      - name: Validate Docker and healthcheck wiring
+        run: |
+          grep -q 'CMD \["npm","start"\]' Dockerfile
+          grep -q 'healthcheck:' docker-compose.yml
+          grep -q '/api/assets/health' docker-compose.yml
 
       - name: Validate Asset Hub HTML wiring
         run: |
@@ -63,11 +79,11 @@ jobs:
             console.error('Expected UI handlers not referenced:', unwired.join(', '));
             process.exit(1);
           }
-          const proFiles = ['pro-features.js','pro-features.css'];
-          const missingProWiring = proFiles.filter(file => !html.includes(`./${file}`));
-          if (missingProWiring.length) {
-            console.error('Missing Asset Hub Pro wiring:', missingProWiring.join(', '));
-            process.exit(1);
+          for (const file of ['pro-features.js','pro-features.css']) {
+            if (!html.includes(`./${file}`)) {
+              console.error('Missing Asset Hub Pro wiring:', file);
+              process.exit(1);
+            }
           }
           for (const marker of ['Smart Asset Scanner','Asset ID Toolbox','Asset Collections','Asset Health','Asset Analytics','Version Diff','Studio Snippets','PRO PIPELINE']) {
             if (!pro.includes(marker) && !html.includes(marker)) {
