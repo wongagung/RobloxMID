@@ -1,7 +1,7 @@
 import { Readable } from "stream";
 
 const API_BASE = "https://apis.roblox.com";
-const DEFAULT_UA = "RobloxMID-AudioProxy/1.0";
+const DEFAULT_UA = "RobloxMID-AudioProxy/1.1";
 
 function validAssetId(value) {
   const id = String(value || "").trim();
@@ -23,19 +23,25 @@ function upstreamHeaders(req) {
   return headers;
 }
 
-function forwardResponseHeaders(upstream, res) {
-  const allowed = [
-    "content-type",
+function sniffAudioType(assetTypeId, contentType) {
+  const type = String(contentType || "").toLowerCase();
+  if (type.includes("audio/")) return contentType;
+  if (assetTypeId === 3) return "audio/ogg";
+  return contentType || "application/octet-stream";
+}
+
+function forwardResponseHeaders(upstream, res, assetTypeId) {
+  const contentType = sniffAudioType(assetTypeId, upstream.headers.get("content-type"));
+  res.setHeader("content-type", contentType);
+
+  for (const name of [
     "content-length",
     "content-range",
     "accept-ranges",
     "etag",
     "last-modified",
-    "cache-control",
     "expires",
-  ];
-
-  for (const name of allowed) {
+  ]) {
     const value = upstream.headers.get(name);
     if (value) res.setHeader(name, value);
   }
@@ -66,7 +72,6 @@ async function resolveAssetLocation(assetId, apiKey) {
   });
 
   const { text, data } = await readJsonResponse(resolver);
-
   if (!resolver.ok) {
     const message = data?.message || data?.error || data?.details?.[0]?.message || text || `Roblox Open Cloud HTTP ${resolver.status}`;
     const error = new Error(message);
@@ -86,7 +91,7 @@ async function resolveAssetLocation(assetId, apiKey) {
   return {
     location,
     resolverUrl: url,
-    assetTypeId: data?.assetTypeId ?? null,
+    assetTypeId: Number(data?.assetTypeId) || null,
     isArchived: data?.isArchived ?? null,
     requestId: data?.requestId ?? null,
   };
@@ -119,7 +124,7 @@ export async function proxyRobloxAudio(req, res, apiKey) {
       });
     }
 
-    forwardResponseHeaders(upstream, res);
+    forwardResponseHeaders(upstream, res, resolved.assetTypeId);
     res.status(upstream.status);
     if (req.method === "HEAD" || !upstream.body) return res.end();
     Readable.fromWeb(upstream.body).pipe(res);
@@ -142,13 +147,12 @@ export async function checkRobloxAudio(assetId, apiKey) {
 
   try {
     const resolved = await resolveAssetLocation(id, apiKey);
-    const candidates = [
+    const attempts = [];
+
+    for (const candidate of [
       { range: "bytes=0-1", label: "range" },
       { range: null, label: "full" },
-    ];
-
-    const attempts = [];
-    for (const candidate of candidates) {
+    ]) {
       try {
         const headers = {
           "User-Agent": DEFAULT_UA,
@@ -163,11 +167,14 @@ export async function checkRobloxAudio(assetId, apiKey) {
           redirect: "follow",
         });
 
-        const mediaType = media.headers.get("content-type");
+        const mediaType = sniffAudioType(resolved.assetTypeId, media.headers.get("content-type"));
         const mediaLength = media.headers.get("content-length");
         const mediaRange = media.headers.get("content-range");
         const mediaAcceptRanges = media.headers.get("accept-ranges");
-        const bodyPreview = await media.text().catch(() => "");
+        const body = Buffer.from(await media.arrayBuffer().catch(() => new ArrayBuffer(0)));
+        const preview = body.subarray(0, 24).toString("latin1");
+        const looksOgg = body.subarray(0, 4).toString("ascii") === "OggS";
+
         attempts.push({
           mode: candidate.label,
           status: media.status,
@@ -176,10 +183,12 @@ export async function checkRobloxAudio(assetId, apiKey) {
           contentLength: mediaLength,
           contentRange: mediaRange,
           acceptRanges: mediaAcceptRanges,
-          bodyPreview: bodyPreview.slice(0, 500),
+          bytesRead: body.length,
+          looksOgg,
+          bodyPreview: preview,
         });
 
-        if (media.ok && mediaType && !mediaType.includes("application/json") && !mediaType.includes("text/html")) {
+        if (media.ok && looksOgg) {
           return {
             ok: true,
             assetId: id,
