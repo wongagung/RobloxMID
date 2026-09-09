@@ -1,0 +1,144 @@
+/* Canonical queue styling: match the Recent tracks/library language. */
+#queuePanel{padding:26px;margin-top:18px}
+#queuePanel .panel-head{margin:0 0 20px}
+#queuePanel .panel-head>div{display:flex;gap:12px;align-items:center;min-width:0}
+#queuePanel .panel-head h2{font-size:17px;margin:0;line-height:1.25}
+#queuePanel .panel-head p{margin:2px 0 0;color:var(--muted);font-size:12px;line-height:1.35}
+#queuePanel .panel-head .ghost-btn{padding:8px 12px;white-space:nowrap}
+
+#queuePanel .queue-list{display:flex;flex-direction:column;max-height:520px;overflow:auto;padding:0}
+#queuePanel .queue-item{
+  display:grid;
+  grid-template-columns:46px minmax(0,1fr) auto;
+  gap:14px;
+  align-items:center;
+  min-height:72px;
+  padding:14px 0;
+  border:0;
+  border-top:1px solid var(--line);
+  border-radius:0;
+  background:transparent;
+  box-shadow:none;
+  transition:background .15s,opacity .15s;
+}
+#queuePanel .queue-item:first-child{border-top:1px solid var(--line)}
+#queuePanel .queue-item:hover{background:linear-gradient(90deg,#ffffff03,transparent);border-color:var(--line)}
+#queuePanel .queue-item.queue-item-ready,
+#queuePanel .queue-item.queue-item-error,
+#queuePanel .queue-item.queue-item-uploading,
+#queuePanel .queue-item.is-download-active,
+#queuePanel .queue-item.is-editing{border-color:var(--line);background:transparent;box-shadow:none}
+#queuePanel .queue-item.queue-item-done{opacity:.58}
+
+#queuePanel .queue-thumb{
+  display:block;
+  width:42px;
+  height:42px;
+  border-radius:11px;
+  object-fit:cover;
+  background:linear-gradient(135deg,#7c3aed,#0891b2);
+  border:0;
+}
+#queuePanel .queue-meta{min-width:0;align-self:center}
+#queuePanel .queue-title{
+  display:block;
+  color:var(--text);
+  font-size:13px;
+  font-weight:800;
+  line-height:1.35;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+#queuePanel .queue-status-text{
+  display:block;
+  margin-top:3px;
+  color:var(--muted);
+  font-size:11px;
+  line-height:1.35;
+}
+#queuePanel .queue-item-ready .queue-status-text{color:var(--good)}
+#queuePanel .queue-item-error .queue-status-text{color:var(--danger)}
+#queuePanel .queue-item-uploading .queue-status-text{color:#fbbf24}
+
+#queuePanel .queue-actions{
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:6px;
+  min-width:max-content;
+}
+#queuePanel .queue-actions button{
+  width:auto!important;
+  min-width:0;
+  margin:0!important;
+  min-height:36px;
+  padding:8px 11px!important;
+  border-radius:10px;
+  font-size:10.5px!important;
+  line-height:1.2;
+  white-space:nowrap;
+}
+#queuePanel .queue-edit-state{
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  margin-top:6px;
+  padding:3px 7px;
+  border:1px solid #22d3ee33;
+  border-radius:999px;
+  background:#22d3ee08;
+  color:#67e8f9;
+  font-size:9px;
+  font-weight:800;
+  line-height:1.2;
+  letter-spacing:.03em;
+  width:max-content;
+}
+#queuePanel .queue-edit-state::before{content:"✓";display:grid;place-items:center;width:12px;height:12px;border-radius:50%;background:#22d3ee18}
+#queuePanel .queue-error-detail{
+  margin-top:6px;
+  max-width:100%;
+  padding:6px 8px;
+  border:1px solid #fb71851f;
+  border-radius:8px;
+  background:#fb718508;
+  color:#fda4af;
+  font-size:10px;
+  line-height:1.4;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+#queuePanel .queue-download-progress{
+  height:4px;
+  margin-top:7px;
+  border-radius:999px;
+  overflow:hidden;
+  background:#ffffff0a;
+}
+#queuePanel .queue-download-progress>i{
+  display:block;
+  height:100%;
+  width:0;
+  background:linear-gradient(90deg,#8b5cf6,#22d3ee);
+  transition:width .15s ease;
+}
+
+#queuePanel #queueEmpty{min-height:180px}
+
+@media(max-width:700px){
+  #queuePanel{padding:18px}
+  #queuePanel .panel-head{align-items:flex-start}
+  #queuePanel .queue-item{grid-template-columns:42px minmax(0,1fr);gap:12px;padding:13px 0}
+  #queuePanel .queue-thumb{width:42px;height:42px}
+  #queuePanel .queue-actions{grid-column:2;justify-content:flex-start;min-width:0;flex-wrap:wrap}
+  #queuePanel .queue-actions button{flex:0 0 auto}
+  #queuePanel .queue-title{white-space:normal;overflow-wrap:anywhere}
+}
+
+@media(max-width:480px){
+  #queuePanel{padding:16px}
+  #queuePanel .queue-item{grid-template-columns:40px minmax(0,1fr);gap:10px}
+  #queuePanel .queue-thumb{width:40px;height:40px}
+  #queuePanel .queue-actions{grid-column:1 / -1}
+}
