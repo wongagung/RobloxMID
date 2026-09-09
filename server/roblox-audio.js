@@ -1,6 +1,7 @@
 import { Readable } from "stream";
 
 const API_BASE = "https://apis.roblox.com";
+const DEFAULT_UA = "RobloxMID-AudioProxy/1.0";
 
 function validAssetId(value) {
   const id = String(value || "").trim();
@@ -8,12 +9,17 @@ function validAssetId(value) {
 }
 
 function upstreamHeaders(req) {
-  const headers = {};
-  for (const name of ["range", "if-range", "if-none-match", "if-modified-since", "accept", "accept-encoding"]) {
+  const headers = {
+    "User-Agent": DEFAULT_UA,
+    Accept: "*/*",
+    "Accept-Encoding": "identity",
+  };
+
+  for (const name of ["range", "if-range", "if-none-match", "if-modified-since"]) {
     const value = req.headers[name];
     if (value) headers[name] = value;
   }
-  headers["Accept-Encoding"] = "identity";
+
   return headers;
 }
 
@@ -34,35 +40,37 @@ function forwardResponseHeaders(upstream, res) {
     if (value) res.setHeader(name, value);
   }
 
-  if (!res.getHeader("content-type") || String(res.getHeader("content-type")).includes("application/json")) {
-    res.setHeader("content-type", "audio/mpeg");
-  }
-
   res.setHeader("content-disposition", "inline");
   res.setHeader("x-roblox-audio-proxy", "open-cloud");
   res.setHeader("access-control-allow-origin", "*");
   res.setHeader("access-control-expose-headers", "Content-Length, Content-Range, Accept-Ranges, ETag, Last-Modified");
 }
 
-async function resolveAssetLocation(assetId, apiKey, req) {
+async function readJsonResponse(response) {
+  const text = await response.text().catch(() => "");
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch {}
+  return { text, data };
+}
+
+async function resolveAssetLocation(assetId, apiKey) {
   const url = `${API_BASE}/asset-delivery-api/v1/assetId/${encodeURIComponent(assetId)}`;
-  const upstream = await fetch(url, {
+  const resolver = await fetch(url, {
     method: "GET",
     headers: {
       "x-api-key": apiKey,
       Accept: "application/json",
+      "User-Agent": DEFAULT_UA,
     },
     redirect: "follow",
   });
 
-  const text = await upstream.text().catch(() => "");
-  let data = null;
-  try { data = text ? JSON.parse(text) : null; } catch {}
+  const { text, data } = await readJsonResponse(resolver);
 
-  if (!upstream.ok) {
-    const message = data?.message || data?.error || data?.details?.[0]?.message || text || `Roblox Open Cloud HTTP ${upstream.status}`;
+  if (!resolver.ok) {
+    const message = data?.message || data?.error || data?.details?.[0]?.message || text || `Roblox Open Cloud HTTP ${resolver.status}`;
     const error = new Error(message);
-    error.status = upstream.status;
+    error.status = resolver.status;
     error.upstreamUrl = url;
     throw error;
   }
@@ -75,6 +83,16 @@ async function resolveAssetLocation(assetId, apiKey, req) {
     throw error;
   }
 
+  return {
+    location,
+    resolverUrl: url,
+    assetTypeId: data?.assetTypeId ?? null,
+    isArchived: data?.isArchived ?? null,
+    requestId: data?.requestId ?? null,
+  };
+}
+
+async function fetchMedia(location, req) {
   return fetch(location, {
     method: req.method === "HEAD" ? "HEAD" : "GET",
     headers: upstreamHeaders(req),
@@ -88,16 +106,17 @@ export async function proxyRobloxAudio(req, res, apiKey) {
   if (!apiKey) return res.status(503).json({ error: "ROBLOX_API_KEY belum dikonfigurasi." });
 
   try {
-    const upstream = await resolveAssetLocation(assetId, apiKey, req);
+    const resolved = await resolveAssetLocation(assetId, apiKey);
+    const upstream = await fetchMedia(resolved.location, req);
 
     if (!upstream.ok) {
-      const text = await upstream.text().catch(() => "");
-      let message = text || `Roblox content delivery HTTP ${upstream.status}`;
-      try {
-        const data = text ? JSON.parse(text) : null;
-        message = data?.message || data?.error || data?.details?.[0]?.message || message;
-      } catch {}
-      return res.status(upstream.status).json({ error: message, assetId, status: upstream.status });
+      const { text, data } = await readJsonResponse(upstream);
+      return res.status(upstream.status).json({
+        error: data?.message || data?.error || data?.details?.[0]?.message || text || `Roblox content delivery HTTP ${upstream.status}`,
+        assetId,
+        status: upstream.status,
+        resolverUrl: resolved.resolverUrl,
+      });
     }
 
     forwardResponseHeaders(upstream, res);
@@ -121,73 +140,89 @@ export async function checkRobloxAudio(assetId, apiKey) {
   if (!id) return { ok: false, status: 400, error: "Asset ID tidak valid." };
   if (!apiKey) return { ok: false, status: 503, error: "ROBLOX_API_KEY belum dikonfigurasi." };
 
-  const url = `${API_BASE}/asset-delivery-api/v1/assetId/${encodeURIComponent(id)}`;
   try {
-    const resolver = await fetch(url, {
-      method: "GET",
-      headers: { "x-api-key": apiKey, Accept: "application/json" },
-      redirect: "follow",
-    });
+    const resolved = await resolveAssetLocation(id, apiKey);
+    const candidates = [
+      { range: "bytes=0-1", label: "range" },
+      { range: null, label: "full" },
+    ];
 
-    const text = await resolver.text().catch(() => "");
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch {}
+    const attempts = [];
+    for (const candidate of candidates) {
+      try {
+        const headers = {
+          "User-Agent": DEFAULT_UA,
+          Accept: "*/*",
+          "Accept-Encoding": "identity",
+        };
+        if (candidate.range) headers.Range = candidate.range;
 
-    if (!resolver.ok) {
-      return {
-        ok: false,
-        assetId: id,
-        status: resolver.status,
-        contentType: resolver.headers.get("content-type"),
-        url,
-        error: data?.message || data?.error || data?.details?.[0]?.message || text || `HTTP ${resolver.status}`,
-      };
+        const media = await fetch(resolved.location, {
+          method: "GET",
+          headers,
+          redirect: "follow",
+        });
+
+        const mediaType = media.headers.get("content-type");
+        const mediaLength = media.headers.get("content-length");
+        const mediaRange = media.headers.get("content-range");
+        const mediaAcceptRanges = media.headers.get("accept-ranges");
+        const bodyPreview = await media.text().catch(() => "");
+        attempts.push({
+          mode: candidate.label,
+          status: media.status,
+          ok: media.ok,
+          contentType: mediaType,
+          contentLength: mediaLength,
+          contentRange: mediaRange,
+          acceptRanges: mediaAcceptRanges,
+          bodyPreview: bodyPreview.slice(0, 500),
+        });
+
+        if (media.ok && mediaType && !mediaType.includes("application/json") && !mediaType.includes("text/html")) {
+          return {
+            ok: true,
+            assetId: id,
+            status: media.status,
+            contentType: mediaType,
+            contentLength: mediaLength,
+            contentRange: mediaRange,
+            acceptRanges: mediaAcceptRanges,
+            url: resolved.location,
+            resolverUrl: resolved.resolverUrl,
+            assetTypeId: resolved.assetTypeId,
+            isArchived: resolved.isArchived,
+            requestId: resolved.requestId,
+            attempts,
+          };
+        }
+      } catch (error) {
+        attempts.push({ mode: candidate.label, status: 0, ok: false, error: error?.message || String(error) });
+      }
     }
 
-    const location = typeof data?.location === "string" ? data.location.trim() : "";
-    if (!location) {
-      return {
-        ok: false,
-        assetId: id,
-        status: 502,
-        contentType: resolver.headers.get("content-type"),
-        url,
-        error: "Open Cloud merespons 200 tetapi location audio tidak ditemukan.",
-      };
-    }
-
-    const media = await fetch(location, {
-      method: "GET",
-      headers: { Range: "bytes=0-1", Accept: "*/*", "Accept-Encoding": "identity" },
-      redirect: "follow",
-    });
-
-    const mediaType = media.headers.get("content-type");
-    const mediaLength = media.headers.get("content-length");
-    const mediaRange = media.headers.get("content-range");
-    const mediaAcceptRanges = media.headers.get("accept-ranges");
-    await media.body?.cancel();
-
+    const last = attempts.at(-1) || {};
     return {
-      ok: media.ok && !String(mediaType || "").includes("application/json"),
+      ok: false,
       assetId: id,
-      status: media.status,
-      contentType: mediaType,
-      contentLength: mediaLength,
-      contentRange: mediaRange,
-      acceptRanges: mediaAcceptRanges,
-      url: location,
-      resolverUrl: url,
-      resolverContentType: resolver.headers.get("content-type"),
-      assetTypeId: data?.assetTypeId ?? null,
-      isArchived: data?.isArchived ?? null,
+      status: last.status || 502,
+      contentType: last.contentType || null,
+      contentLength: last.contentLength || null,
+      contentRange: last.contentRange || null,
+      acceptRanges: last.acceptRanges || null,
+      url: resolved.location,
+      resolverUrl: resolved.resolverUrl,
+      assetTypeId: resolved.assetTypeId,
+      isArchived: resolved.isArchived,
+      requestId: resolved.requestId,
+      attempts,
     };
   } catch (error) {
     return {
       ok: false,
       assetId: id,
-      status: 502,
-      url,
+      status: error?.status || 502,
+      url: error?.upstreamUrl || null,
       error: error?.message || "Gagal memverifikasi audio.",
     };
   }
