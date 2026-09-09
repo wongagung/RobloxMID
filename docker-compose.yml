@@ -16,6 +16,7 @@ services:
       - .env
     environment:
       - BGUTIL_HTTP_BASE_URL=http://bgutil:4416
+      - MAX_FILE_SIZE_MB=500
     ports:
       - "127.0.0.1:8788:8787"
     volumes:
