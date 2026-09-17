@@ -7,6 +7,19 @@
   <meta name="description" content="Upload, preview, send to Telegram and publish Roblox audio.">
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="stylesheet" href="/style.css">
+  <style id="uploader-layout-fix">
+    @media (min-width: 901px) {
+      .grid {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) 330px !important;
+        grid-template-areas: "upload services" !important;
+        gap: 18px !important;
+        align-items: start !important;
+      }
+      .upload-panel { grid-area: upload !important; grid-column: auto !important; grid-row: auto !important; min-width: 0 !important; }
+      .status-panel { grid-area: services !important; grid-column: auto !important; grid-row: auto !important; min-width: 0 !important; display: block !important; }
+    }
+  </style>
 </head>
 <body>
   <div class="bg-grid"></div>
@@ -18,14 +31,8 @@
       <span><b>ROBLOX</b> MUSIC <em>LAB</em></span>
     </a>
     <nav aria-label="Ecosystem" style="display:flex;align-items:center;gap:8px;margin-left:auto;margin-right:10px">
-      <a href="/playback-normalizer/" title="Playback Normalizer" style="display:flex;align-items:center;gap:9px;padding:8px 12px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:12px;background:var(--panel,rgba(255,255,255,.04));color:var(--text,#fff);text-decoration:none;white-space:nowrap;transition:transform .18s ease,border-color .18s ease,background .18s ease">
-        <span style="width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:rgba(129,140,248,.12);font-size:12px">⏱</span>
-        <span style="display:flex;flex-direction:column;line-height:1.05;text-align:left"><strong style="font-size:12px">Normalizer</strong><small style="font-size:10px;opacity:.6;margin-top:3px">Playback Speed</small></span>
-      </a>
-      <a href="https://asetplayer.duckdns.org/" title="Open WaveDeck music player" style="display:flex;align-items:center;gap:9px;padding:8px 12px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:12px;background:var(--panel,rgba(255,255,255,.04));color:var(--text,#fff);text-decoration:none;white-space:nowrap;transition:transform .18s ease,border-color .18s ease,background .18s ease">
-        <span style="width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:rgba(255,255,255,.08);font-size:12px">▶</span>
-        <span style="display:flex;flex-direction:column;line-height:1.05;text-align:left"><strong style="font-size:12px">WaveDeck</strong><small style="font-size:10px;opacity:.6;margin-top:3px">Music Player</small></span>
-      </a>
+      <a href="/playback-normalizer/" title="Playback Normalizer" style="display:flex;align-items:center;gap:9px;padding:8px 12px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:12px;background:var(--panel,rgba(255,255,255,.04));color:var(--text,#fff);text-decoration:none;white-space:nowrap;transition:transform .18s ease,border-color .18s ease,background .18s ease"><span style="width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:rgba(129,140,248,.12);font-size:12px">⏱</span><span style="display:flex;flex-direction:column;line-height:1.05;text-align:left"><strong style="font-size:12px">Normalizer</strong><small style="font-size:10px;opacity:.6;margin-top:3px">Playback Speed</small></span></a>
+      <a href="https://asetplayer.duckdns.org/" title="Open WaveDeck music player" style="display:flex;align-items:center;gap:9px;padding:8px 12px;border:1px solid var(--border,rgba(255,255,255,.12));border-radius:12px;background:var(--panel,rgba(255,255,255,.04));color:var(--text,#fff);text-decoration:none;white-space:nowrap;transition:transform .18s ease,border-color .18s ease,background .18s ease"><span style="width:28px;height:28px;display:grid;place-items:center;border-radius:8px;background:rgba(255,255,255,.08);font-size:12px">▶</span><span style="display:flex;flex-direction:column;line-height:1.05;text-align:left"><strong style="font-size:12px">WaveDeck</strong><small style="font-size:10px;opacity:.6;margin-top:3px">Music Player</small></span></a>
     </nav>
     <div class="top-actions">
       <a href="/assets/" title="Roblox Asset Hub" style="display:flex;align-items:center;gap:7px;width:auto;padding:0 12px;color:var(--text);text-decoration:none;white-space:nowrap" class="icon-btn">📦 <span style="font-size:12px;font-weight:700">Asset Hub</span></a>
@@ -43,83 +50,19 @@
         <h1>Turn your track into a<br><span>Roblox-ready asset.</span></h1>
         <p class="hero-copy">Upload once. Preview instantly. Send a copy to Telegram and publish to Roblox Open Cloud from one clean workspace.</p>
       </div>
-      <div class="hero-card hero-multi">
-        <div class="pulse"></div>
-        <div class="hero-title">📦 Roblox Asset Status</div>
-        <div class="hero-stats">
-          <div class="hero-stat"><strong id="heroApproved">0</strong><small>approved</small></div>
-          <div class="hero-stat-divider"></div>
-          <div class="hero-stat"><strong id="heroRejected">0</strong><small>rejected</small></div>
-          <div class="hero-stat-divider"></div>
-          <div class="hero-stat"><strong id="heroReviewing">0</strong><small>reviewing</small></div>
-        </div>
-      </div>
+      <div class="hero-card hero-multi"><div class="pulse"></div><div class="hero-title">📦 Roblox Asset Status</div><div class="hero-stats"><div class="hero-stat"><strong id="heroApproved">0</strong><small>approved</small></div><div class="hero-stat-divider"></div><div class="hero-stat"><strong id="heroRejected">0</strong><small>rejected</small></div><div class="hero-stat-divider"></div><div class="hero-stat"><strong id="heroReviewing">0</strong><small>reviewing</small></div></div></div>
     </section>
 
     <section class="grid">
       <div class="panel upload-panel">
-        <div class="panel-head">
-          <div><span class="section-icon">↑</span><div><h2>Upload track</h2><p>Supported formats or automatic conversion</p></div></div>
-          <span id="limitLabel" class="muted">Max 20 MB</span>
-        </div>
-
-        <div class="source-tabs" role="tablist">
-          <button class="source-tab active" data-source="file" title="Upload file">📁 File</button>
-          <button class="source-tab" data-source="url" title="Dari URL">🔗 URL</button>
-        </div>
-
-        <div id="sourceFile">
-          <label id="dropzone" class="dropzone">
-            <input id="fileInput" type="file" accept=".mp3,.wav,.ogg,.flac,audio/*">
-            <div class="drop-icon">♫</div>
-            <h3>Drop your music here</h3>
-            <p>or <u>browse files</u> from your computer</p>
-            <span class="format">MP3 · WAV · OGG · FLAC · M4A · AAC · OPUS · WEBM · MORE</span>
-          </label>
-        </div>
-
-        <div id="sourceUrl" class="hidden">
-          <div class="url-panel">
-            <div class="url-icon">🔗</div>
-            <p class="url-hint">YouTube, SoundCloud, Spotify preview, Bandcamp, Vimeo, dan 1000+ situs lainnya</p>
-            <div class="url-input-row">
-              <input id="urlInput" type="url" placeholder="https://youtube.com/watch?v=... atau link lainnya" autocomplete="off" spellcheck="false">
-              <button id="urlInfoBtn" class="ghost-btn">Cek Info</button>
-            </div>
-            <div id="urlStatus" class="url-status hidden"><span id="urlStatusText">Mendownload...</span></div>
-            <div id="urlPreviewCard" class="url-preview hidden">
-              <img id="urlThumb" src="" alt="" class="url-thumb">
-              <div class="url-meta"><div id="urlTitle" class="url-meta-title"></div><div id="urlUploader" class="url-meta-sub"></div><div id="urlDuration" class="url-meta-sub"></div></div>
-              <button id="urlFetchBtn" class="primary-btn url-dl-btn">⬇ Download & Pakai</button>
-            </div>
-            <div id="playlistCard" class="playlist-card hidden">
-              <div class="playlist-head"><div><div id="playlistTitle" class="playlist-title"></div><div id="playlistMeta" class="playlist-meta"></div></div><div class="playlist-actions"><button id="playlistSelectAll" class="ghost-btn">Pilih Semua</button><button id="playlistDownloadBtn" class="primary-btn" disabled>⬇ Download Terpilih</button></div></div>
-              <div id="playlistItems" class="playlist-items"></div>
-              <div id="playlistProgress" class="playlist-progress hidden"><div class="playlist-prog-bar-wrap"><div id="playlistProgBar" class="playlist-prog-bar" style="width:0%"></div></div><div id="playlistProgText" class="playlist-prog-text"></div></div>
-            </div>
-            <details class="cookies-details"><summary>🍪 YouTube cookies (jika gagal karena bot detection)</summary><div class="cookies-panel"><p>Export cookies dari browser pakai ekstensi <b>Get cookies.txt LOCALLY</b>, lalu upload di sini.</p><div class="url-input-row"><input type="file" id="cookiesFileInput" accept=".txt" style="flex:1;padding:8px"><button id="cookiesUploadBtn" class="ghost-btn">Upload</button></div><div id="cookiesStatus" class="url-status hidden"><span id="cookiesStatusText"></span></div></div></details>
-          </div>
-        </div>
-
+        <div class="panel-head"><div><span class="section-icon">↑</span><div><h2>Upload track</h2><p>Supported formats or automatic conversion</p></div></div><span id="limitLabel" class="muted">Max 20 MB</span></div>
+        <div class="source-tabs" role="tablist"><button class="source-tab active" data-source="file" title="Upload file">📁 File</button><button class="source-tab" data-source="url" title="Dari URL">🔗 URL</button></div>
+        <div id="sourceFile"><label id="dropzone" class="dropzone"><input id="fileInput" type="file" accept=".mp3,.wav,.ogg,.flac,audio/*"><div class="drop-icon">♫</div><h3>Drop your music here</h3><p>or <u>browse files</u> from your computer</p><span class="format">MP3 · WAV · OGG · FLAC · M4A · AAC · OPUS · WEBM · MORE</span></label></div>
+        <div id="sourceUrl" class="hidden"><div class="url-panel"><div class="url-icon">🔗</div><p class="url-hint">YouTube, SoundCloud, Spotify preview, Bandcamp, Vimeo, dan 1000+ situs lainnya</p><div class="url-input-row"><input id="urlInput" type="url" placeholder="https://youtube.com/watch?v=... atau link lainnya" autocomplete="off" spellcheck="false"><button id="urlInfoBtn" class="ghost-btn">Cek Info</button></div><div id="urlStatus" class="url-status hidden"><span id="urlStatusText">Mendownload...</span></div><div id="urlPreviewCard" class="url-preview hidden"><img id="urlThumb" src="" alt="" class="url-thumb"><div class="url-meta"><div id="urlTitle" class="url-meta-title"></div><div id="urlUploader" class="url-meta-sub"></div><div id="urlDuration" class="url-meta-sub"></div></div><button id="urlFetchBtn" class="primary-btn url-dl-btn">⬇ Download & Pakai</button></div><div id="playlistCard" class="playlist-card hidden"><div class="playlist-head"><div><div id="playlistTitle" class="playlist-title"></div><div id="playlistMeta" class="playlist-meta"></div></div><div class="playlist-actions"><button id="playlistSelectAll" class="ghost-btn">Pilih Semua</button><button id="playlistDownloadBtn" class="primary-btn" disabled>⬇ Download Terpilih</button></div></div><div id="playlistItems" class="playlist-items"></div><div id="playlistProgress" class="playlist-progress hidden"><div class="playlist-prog-bar-wrap"><div id="playlistProgBar" class="playlist-prog-bar" style="width:0%"></div></div><div id="playlistProgText" class="playlist-prog-text"></div></div></div><details class="cookies-details"><summary>🍪 YouTube cookies (jika gagal karena bot detection)</summary><div class="cookies-panel"><p>Export cookies dari browser pakai ekstensi <b>Get cookies.txt LOCALLY</b>, lalu upload di sini.</p><div class="url-input-row"><input type="file" id="cookiesFileInput" accept=".txt" style="flex:1;padding:8px"><button id="cookiesUploadBtn" class="ghost-btn">Upload</button></div><div id="cookiesStatus" class="url-status hidden"><span id="cookiesStatusText"></span></div></div></details></div></div>
         <div id="selected" class="selected hidden"><div class="track-art">♫</div><div class="track-info"><strong id="fileName">track.mp3</strong><span id="fileMeta">0 MB</span></div><button id="removeBtn" class="mini-btn">×</button></div>
         <div id="previewBox" class="preview hidden"><audio id="audio" controls></audio></div>
-
         <div class="field"><label>Roblox asset name</label><input id="assetName" minlength="3" maxlength="50" placeholder="e.g. Beach Club - Summer Night"><span id="assetNameHint" class="muted">3–50 karakter</span></div>
-
-        <div id="advancedEditor" class="advanced-editor-card">
-          <div class="editor-head"><div><h3 id="editorTrackName">🎚 Advanced Sound Studio</h3><p>Edit audio before Roblox upload</p></div><span id="editorStatus">Waiting audio...</span></div>
-          <div class="editor-tabs" role="tablist"><button class="tab-btn active" data-tab="trim" title="Pangkas">✂ <span>Pangkas</span></button><button class="tab-btn" data-tab="volume" title="Volume">🔊</button><button class="tab-btn" data-tab="speed" title="Speed">⏱</button><button class="tab-btn" data-tab="pitch" title="Pitch">〰</button><button class="tab-btn" data-tab="eq" title="Equalizer">▤</button><button class="tab-btn" data-tab="reverb" title="Reverb">🌊</button><button class="tab-btn" data-tab="stereo" title="Stereo">⟺</button></div>
-          <div class="editor-visual"><div class="wave-wrap" id="waveWrap"><canvas id="editorWave" class="wave-canvas" height="90"></canvas><canvas id="editorSpectrum" class="spectrum-canvas" height="30"></canvas><div class="wave-watermark" id="waveWatermark"></div><div class="playhead" id="playhead"></div><div class="trim-dim trim-dim-left" id="trimDimLeft"></div><div class="trim-dim trim-dim-right" id="trimDimRight"></div><div class="trim-handle trim-handle-left" id="trimHandleLeft"></div><div class="trim-handle trim-handle-right" id="trimHandleRight"></div></div><div class="wave-times"><span id="waveTimeStart">00:00.0</span><span id="waveTimeCursor">00:00.0</span><span id="waveTimeEnd">00:00.0</span></div></div>
-          <div class="tab-panel" data-panel="trim"><p class="tab-hint">Geser gagang biru di ujung waveform buat pangkas awal/akhir lagu.</p></div>
-          <div class="tab-panel hidden" data-panel="volume"><label class="big-slider"><span class="editor-label-row"><span>Volume</span><span class="value-input-wrap"><input id="editorGainVal" type="number" step="0.01" min="-20" max="20" value="0.00" disabled><i>dB</i></span></span><input id="editorGain" type="range" min="-20" max="20" step="0.01" value="0" disabled></label></div>
-          <div class="tab-panel hidden" data-panel="speed"><label class="big-slider"><span class="editor-label-row"><span>Speed</span><span class="value-input-wrap"><input id="editorSpeedVal" type="number" step="0.01" min="0.5" max="2" value="1.00" disabled><i>x</i></span></span><input id="editorSpeed" type="range" min="0.5" max="2" step="0.01" value="1" disabled></label></div>
-          <div class="tab-panel hidden" data-panel="pitch"><label class="big-slider"><span class="editor-label-row"><span>Pitch</span><span class="value-input-wrap"><input id="editorPitchVal" type="number" step="1" min="-12" max="12" value="0" disabled><i>semitone</i></span></span><input id="editorPitch" type="range" min="-12" max="12" step="1" value="0" disabled></label></div>
-          <div class="tab-panel hidden" data-panel="eq"><div class="eq-presets" id="eqPresets"></div><div class="eq-bands" id="eqBands"></div></div>
-          <div class="tab-panel hidden" data-panel="reverb"><label class="big-slider"><span class="editor-label-row"><span>Reverb Mix</span><span class="value-input-wrap"><input id="editorReverbVal" type="number" step="1" min="0" max="100" value="0" disabled><i>%</i></span></span><input id="editorReverb" type="range" min="0" max="100" step="1" value="0" disabled></label><label class="big-slider"><span class="editor-label-row"><span>Room Size</span><span class="value-input-wrap"><input id="editorRoomVal" type="number" step="1" min="0" max="100" value="50" disabled><i>%</i></span></span><input id="editorRoom" type="range" min="0" max="100" step="1" value="50" disabled></label></div>
-          <div class="tab-panel hidden" data-panel="stereo"><label class="big-slider"><span class="editor-label-row"><span>Stereo Width</span><span class="value-input-wrap"><input id="editorStereoVal" type="number" step="1" min="-100" max="100" value="0" disabled><i>%</i></span></span><input id="editorStereo" type="range" min="-100" max="100" step="1" value="0" disabled></label><p class="tab-hint">Negatif = lebih mono, Positif = lebih lebar, 0 = original</p></div>
-          <div class="editor-common"><div class="fade-row"><label class="fade-chk"><input type="checkbox" id="fadeInChk" disabled> Fade In <input type="number" id="editorFadeInVal" min="0" max="30" step="0.5" value="3" disabled> sec</label><label class="fade-chk"><input type="checkbox" id="fadeOutChk" disabled> Fade Out <input type="number" id="editorFadeOutVal" min="0" max="30" step="0.5" value="3" disabled> sec</label></div><div class="transport-row"><button id="editorPlay" class="play-btn" disabled>▶</button><span id="trimRangeLabel" class="trim-range-label">00:00.0 — 00:00.0</span><span class="spacer"></span><button id="editorApply" class="ghost-btn" disabled>Save</button><button id="editorReset" class="ghost-btn" disabled>↺ Reset</button></div></div></div>
-        </div>
-
+        <div id="advancedEditor" class="advanced-editor-card"><div class="editor-head"><div><h3 id="editorTrackName">🎚 Advanced Sound Studio</h3><p>Edit audio before Roblox upload</p></div><span id="editorStatus">Waiting audio...</span></div><div class="editor-tabs" role="tablist"><button class="tab-btn active" data-tab="trim" title="Pangkas">✂ <span>Pangkas</span></button><button class="tab-btn" data-tab="volume" title="Volume">🔊</button><button class="tab-btn" data-tab="speed" title="Speed">⏱</button><button class="tab-btn" data-tab="pitch" title="Pitch">〰</button><button class="tab-btn" data-tab="eq" title="Equalizer">▤</button><button class="tab-btn" data-tab="reverb" title="Reverb">🌊</button><button class="tab-btn" data-tab="stereo" title="Stereo">⟺</button></div><div class="editor-visual"><div class="wave-wrap" id="waveWrap"><canvas id="editorWave" class="wave-canvas" height="90"></canvas><canvas id="editorSpectrum" class="spectrum-canvas" height="30"></canvas><div class="wave-watermark" id="waveWatermark"></div><div class="playhead" id="playhead"></div><div class="trim-dim trim-dim-left" id="trimDimLeft"></div><div class="trim-dim trim-dim-right" id="trimDimRight"></div><div class="trim-handle trim-handle-left" id="trimHandleLeft"></div><div class="trim-handle trim-handle-right" id="trimHandleRight"></div></div><div class="wave-times"><span id="waveTimeStart">00:00.0</span><span id="waveTimeCursor">00:00.0</span><span id="waveTimeEnd">00:00.0</span></div></div><div class="tab-panel" data-panel="trim"><p class="tab-hint">Geser gagang biru di ujung waveform buat pangkas awal/akhir lagu.</p></div><div class="tab-panel hidden" data-panel="volume"><label class="big-slider"><span class="editor-label-row"><span>Volume</span><span class="value-input-wrap"><input id="editorGainVal" type="number" step="0.01" min="-20" max="20" value="0.00" disabled><i>dB</i></span></span><input id="editorGain" type="range" min="-20" max="20" step="0.01" value="0" disabled></label></div><div class="tab-panel hidden" data-panel="speed"><label class="big-slider"><span class="editor-label-row"><span>Speed</span><span class="value-input-wrap"><input id="editorSpeedVal" type="number" step="0.01" min="0.5" max="2" value="1.00" disabled><i>x</i></span></span><input id="editorSpeed" type="range" min="0.5" max="2" step="0.01" value="1" disabled></label></div><div class="tab-panel hidden" data-panel="pitch"><label class="big-slider"><span class="editor-label-row"><span>Pitch</span><span class="value-input-wrap"><input id="editorPitchVal" type="number" step="1" min="-12" max="12" value="0" disabled><i>semitone</i></span></span><input id="editorPitch" type="range" min="-12" max="12" step="1" value="0" disabled></label></div><div class="tab-panel hidden" data-panel="eq"><div class="eq-presets" id="eqPresets"></div><div class="eq-bands" id="eqBands"></div></div><div class="tab-panel hidden" data-panel="reverb"><label class="big-slider"><span class="editor-label-row"><span>Reverb Mix</span><span class="value-input-wrap"><input id="editorReverbVal" type="number" step="1" min="0" max="100" value="0" disabled><i>%</i></span></span><input id="editorReverb" type="range" min="0" max="100" step="1" value="0" disabled></label><label class="big-slider"><span class="editor-label-row"><span>Room Size</span><span class="value-input-wrap"><input id="editorRoomVal" type="number" step="1" min="0" max="100" value="50" disabled><i>%</i></span></span><input id="editorRoom" type="range" min="0" max="100" step="1" value="50" disabled></label></div><div class="tab-panel hidden" data-panel="stereo"><label class="big-slider"><span class="editor-label-row"><span>Stereo Width</span><span class="value-input-wrap"><input id="editorStereoVal" type="number" step="1" min="-100" max="100" value="0" disabled><i>%</i></span></span><input id="editorStereo" type="range" min="-100" max="100" step="1" value="0" disabled></label><p class="tab-hint">Negatif = lebih mono, Positif = lebih lebar, 0 = original</p></div><div class="editor-common"><div class="fade-row"><label class="fade-chk"><input type="checkbox" id="fadeInChk" disabled> Fade In <input type="number" id="editorFadeInVal" min="0" max="30" step="0.5" value="3" disabled> sec</label><label class="fade-chk"><input type="checkbox" id="fadeOutChk" disabled> Fade Out <input type="number" id="editorFadeOutVal" min="0" max="30" step="0.5" value="3" disabled> sec</label></div><div class="transport-row"><button id="editorPlay" class="play-btn" disabled>▶</button><span id="trimRangeLabel" class="trim-range-label">00:00.0 — 00:00.0</span><span class="spacer"></span><button id="editorApply" class="ghost-btn" disabled>Save</button><button id="editorReset" class="ghost-btn" disabled>↺ Reset</button></div></div></div>
         <button id="uploadBtn" class="primary-btn" disabled><span>Upload & process</span><b>→</b></button>
         <div id="progressWrap" class="progress-wrap hidden"><div class="progress-label"><span id="progressText">Uploading...</span><span id="progressPct">0%</span></div><div class="progress"><i id="progressBar"></i></div></div>
       </div>
