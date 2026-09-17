@@ -3,11 +3,73 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="refresh" content="0; url=https://asetplayer.duckdns.org/normalizer/">
-  <title>Playback Normalizer — WaveDeck</title>
-  <script>window.location.replace('https://asetplayer.duckdns.org/normalizer/');</script>
+  <meta name="theme-color" content="#0b0d10">
+  <title>Playback Normalizer — Roblox Music Lab</title>
+  <meta name="description" content="Hitung Roblox Sound PlaybackSpeed untuk menormalkan tempo audio yang sudah diedit.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/playback-normalizer/playback-normalizer.css">
 </head>
 <body>
-  <p>Playback Normalizer dipindahkan ke WaveDeck. <a href="https://asetplayer.duckdns.org/normalizer/">Buka WaveDeck Normalizer</a>.</p>
+  <main class="normalizer-shell">
+    <header class="topbar">
+      <a class="brand" href="/">♫ ROBLOX MUSIC <em>LAB</em></a>
+      <nav>
+        <a href="/">Uploader</a>
+        <a class="active" href="/playback-normalizer/">Normalizer</a>
+        <a href="https://asetplayer.duckdns.org/">WaveDeck</a>
+        <a href="/assets/">Asset Hub</a>
+      </nav>
+    </header>
+
+    <section class="hero">
+      <div>
+        <p class="eyebrow">PLAYBACK TOOL</p>
+        <h1>Make every track<br><span>play at the intended tempo.</span></h1>
+        <p class="hero-copy">Hitung nilai <b>Sound.PlaybackSpeed</b> untuk audio yang sebelumnya diedit dengan perubahan speed.</p>
+        <div class="formula"><code>PlaybackSpeed = Target Playback ÷ Source Edit Speed</code></div>
+      </div>
+      <div class="visual" aria-hidden="true">
+        <div class="orbit one"></div><div class="orbit two"></div><strong>1×</strong>
+        <i class="node n1">2×</i><i class="node n2">0.5×</i><i class="node n3">1.5×</i>
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="panel calculator">
+        <div class="panel-title"><div><b>Playback calculator</b><span>Target normal = 1×</span></div></div>
+        <div class="fields">
+          <label><span>Source edit speed</span><div class="input"><input id="sourceSpeed" type="number" min="0.05" max="8" step="0.01" value="2"><b>×</b></div><small>Speed yang dipakai saat editing.</small></label>
+          <label><span>Target playback</span><div class="input"><input id="targetSpeed" type="number" min="0.05" max="8" step="0.01" value="1"><b>×</b></div><small>Speed yang ingin kamu dengar di game.</small></label>
+        </div>
+        <div class="result">
+          <span>ROBLOX PLAYBACKSPEED</span>
+          <strong id="playbackResult">0.5×</strong>
+          <p id="resultText">Audio diedit 2× → gunakan PlaybackSpeed 0.5× untuk target normal 1×.</p>
+          <button id="copyResult" type="button">Copy value</button>
+        </div>
+        <div class="equation"><b id="sourceSummary">2×</b><span>÷</span><b id="targetSummary">1×</b><span>=</span><b id="robloxSummary">0.5×</b></div>
+      </article>
+
+      <article class="panel snippet">
+        <div class="panel-title"><div><b>Roblox snippet</b><span>Siap ditempel ke music player.</span></div><button id="copyCode" type="button">Copy Lua</button></div>
+        <pre id="luaCode"><code>local sound = workspace.MusicPlayer.Sound
+
+sound.SoundId = "rbxassetid://ASSET_ID"
+sound.PlaybackSpeed = 0.5
+sound.Volume = 1
+sound.Looped = true
+
+sound:Play()</code></pre>
+      </article>
+    </section>
+
+    <section class="panel reference">
+      <div class="panel-title"><div><b>Quick reference</b><span>Target normal 1×</span></div><code>1 ÷ sourceSpeed</code></div>
+      <div class="table-wrap"><table><thead><tr><th>Source</th><th>PlaybackSpeed</th><th>Result</th></tr></thead><tbody id="referenceBody"></tbody></table></div>
+    </section>
+
+    <footer>ROBLOX MUSIC LAB · Playback Normalizer <a href="/">Back to uploader →</a></footer>
+  </main>
+  <script src="/playback-normalizer/playback-normalizer.js"></script>
 </body>
 </html>
