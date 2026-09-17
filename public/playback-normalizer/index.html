@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b0d10">
+  <title>Playback Normalizer — Roblox Music Lab</title>
+  <meta name="description" content="Hitung Roblox Sound PlaybackSpeed untuk menormalkan tempo audio yang sudah diedit.">
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/playback-normalizer/playback-normalizer.css">
+</head>
+<body>
+  <div class="bg-grid"></div>
+  <div class="orb orb-a"></div><div class="orb orb-b"></div>
+
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark">♫</span>
+      <span><b>ROBLOX</b> MUSIC <em>LAB</em></span>
+    </a>
+
+    <nav class="ecosystem-nav" aria-label="Ecosystem">
+      <a class="ecosystem-link" href="/" title="Roblox Music Lab">
+        <span class="ecosystem-icon">♫</span>
+        <span><strong>Music Lab</strong><small>Uploader</small></span>
+      </a>
+      <a class="ecosystem-link is-active" href="/playback-normalizer/" title="Playback Normalizer">
+        <span class="ecosystem-icon">⏱</span>
+        <span><strong>Normalizer</strong><small>Playback speed</small></span>
+      </a>
+      <a class="ecosystem-link" href="https://asetplayer.duckdns.org/" title="Open WaveDeck music player">
+        <span class="ecosystem-icon">▶</span>
+        <span><strong>WaveDeck</strong><small>Music player</small></span>
+      </a>
+      <a class="ecosystem-link" href="/assets/" title="Roblox Asset Hub">
+        <span class="ecosystem-icon">📦</span>
+        <span><strong>Asset Hub</strong><small>Roblox assets</small></span>
+      </a>
+    </nav>
+
+    <div class="top-actions">
+      <span class="time-pill" id="clockPill"><i class="clock-dot"></i><b id="clock">--:--:--</b></span>
+      <span id="serverBadge" class="status-pill"><i></i> Checking...</span>
+      <button id="themeBtn" class="icon-btn" title="Toggle theme">☼</button>
+      <button id="logoutBtn" class="icon-btn hidden" title="Logout">⏻</button>
+    </div>
+  </header>
+
+  <main class="normalizer-shell">
+    <section class="normalizer-hero">
+      <div>
+        <p class="eyebrow">PLAYBACK TOOL</p>
+        <h1>Make every track<br><span>play at the intended tempo.</span></h1>
+        <p class="hero-copy">Masukkan speed yang dipakai saat editing. Roblox Music Lab akan menghitung nilai <b>Sound.PlaybackSpeed</b> yang perlu dipakai di music player dalam game.</p>
+        <div class="formula-pill"><code>Roblox PlaybackSpeed = Target Playback ÷ Source Edit Speed</code></div>
+      </div>
+      <div class="hero-visual" aria-hidden="true">
+        <div class="hero-orbit orbit-one"></div>
+        <div class="hero-orbit orbit-two"></div>
+        <div class="hero-core">1×</div>
+        <span class="hero-node node-a">2×</span>
+        <span class="hero-node node-b">0.5×</span>
+        <span class="hero-node node-c">1.5×</span>
+      </div>
+    </section>
+
+    <section class="calculator-grid">
+      <article class="panel calculator-panel">
+        <div class="panel-head">
+          <div><span class="section-icon">⏱</span><div><h2>Playback calculator</h2><p>Hitung nilai yang dipakai oleh <code>Sound.PlaybackSpeed</code>.</p></div></div>
+        </div>
+
+        <div class="input-grid">
+          <label class="calc-field">
+            <span>Source edit speed</span>
+            <div class="input-with-suffix"><input id="sourceSpeed" type="number" min="0.05" max="8" step="0.01" value="2" inputmode="decimal"><b>×</b></div>
+            <small>Speed saat audio diproses di Advanced Sound Studio.</small>
+          </label>
+          <label class="calc-field">
+            <span>Target playback</span>
+            <div class="input-with-suffix"><input id="targetSpeed" type="number" min="0.05" max="8" step="0.01" value="1" inputmode="decimal"><b>×</b></div>
+            <small>Kecepatan yang kamu ingin dengar di game.</small>
+          </label>
+        </div>
+
+        <div class="result-card" id="resultCard">
+          <div class="result-copy">
+            <span class="eyebrow">ROBLOX PLAYBACKSPEED</span>
+            <strong id="playbackResult">0.5×</strong>
+            <p id="resultText">Audio diedit 2× → set PlaybackSpeed ke 0.5× untuk target normal 1×.</p>
+          </div>
+          <button class="copy-result" id="copyResult" type="button">Copy value</button>
+        </div>
+
+        <div class="quick-values">
+          <div><span>Source</span><b id="sourceSummary">2×</b></div>
+          <i>÷</i>
+          <div><span>Target</span><b id="targetSummary">1×</b></div>
+          <i>=</i>
+          <div class="accent-value"><span>Roblox</span><b id="robloxSummary">0.5×</b></div>
+        </div>
+
+        <div class="notice">
+          <span>i</span>
+          <p>Nilai ini hanya mengatur playback pada <code>Sound</code> di game. Isi asset Roblox tidak diubah.</p>
+        </div>
+      </article>
+
+      <article class="panel code-panel">
+        <div class="panel-head compact-head">
+          <div><span class="section-icon">&lt;/&gt;</span><div><h2>Roblox snippet</h2><p>Siap ditempel ke music player kamu.</p></div></div>
+          <button id="copyCode" class="ghost-btn" type="button">Copy Lua</button>
+        </div>
+        <pre id="luaCode"><code>local sound = workspace.MusicPlayer.Sound
+
+sound.SoundId = "rbxassetid://ASSET_ID"
+sound.PlaybackSpeed = 0.5
+sound.Volume = 1
+sound.Looped = true
+
+sound:Play()</code></pre>
+        <div class="code-note">Ganti <code>ASSET_ID</code> dengan ID asset Roblox.</div>
+      </article>
+    </section>
+
+    <section class="panel reference-panel">
+      <div class="panel-head compact-head">
+        <div><h2>Quick reference</h2><p>Target normal 1× untuk beberapa source speed yang umum.</p></div>
+        <span class="muted">Formula: <code>1 ÷ sourceSpeed</code></span>
+      </div>
+      <div class="reference-table-wrap">
+        <table class="reference-table">
+          <thead><tr><th>Source edit</th><th>Roblox PlaybackSpeed</th><th>Result</th></tr></thead>
+          <tbody id="referenceBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="info-grid">
+      <article class="panel info-card">
+        <span class="info-icon">1×</span>
+        <div><h3>Asset normal</h3><p>Kalau audio tidak diedit speed-nya, gunakan <code>PlaybackSpeed = 1</code>.</p></div>
+      </article>
+      <article class="panel info-card">
+        <span class="info-icon">2×</span>
+        <div><h3>Audio 2×</h3><p>Audio yang diproses pada 2× memerlukan <code>PlaybackSpeed = 0.5</code> untuk kembali ke target 1×.</p></div>
+      </article>
+      <article class="panel info-card">
+        <span class="info-icon">∞</span>
+        <div><h3>Nilai presisi</h3><p>Calculator mempertahankan nilai desimal agar speed seperti 1.25× atau 1.5× tetap akurat.</p></div>
+      </article>
+    </section>
+
+    <footer class="normalizer-footer">
+      <span>ROBLOX MUSIC LAB</span>
+      <span>Playback Normalizer</span>
+      <a href="/">Back to uploader →</a>
+    </footer>
+  </main>
+
+  <script src="/playback-normalizer/playback-normalizer.js"></script>
+</body>
+</html>
